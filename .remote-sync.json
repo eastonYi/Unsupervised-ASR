@@ -1,0 +1,19 @@
+{
+  "logger": {
+    "title": "Remote Sync"
+  },
+  "uploadOnSave": true,
+  "useAtomicWrites": true,
+  "deleteLocal": true,
+  "hostname": "172.18.30.114",
+  "port": "22",
+  "target": "/home/user/easton/projects/EODM",
+  "ignore": [
+    ".remote-sync.json",
+    ".git/**"
+  ],
+  "username": "user",
+  "password": "      ",
+  "watch": [],
+  "transport": "scp"
+}
