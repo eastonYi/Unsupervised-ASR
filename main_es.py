@@ -9,6 +9,8 @@ import numpy as np
 from tqdm import tqdm
 from random import sample
 from nltk import FreqDist
+import threading
+from queue import Queue
 
 from eastonCode.tfTools.tfData import TFData
 
@@ -36,7 +38,7 @@ def train(Model):
     ngram_py, total_num = read_ngram(args.data.k, args.dirs.ngram, args.token2idx, type='list')
 
     # create model paremeters
-    optimizer = tf.keras.optimizers.Adam(args.opti.lr_fs)
+    optimizer = tf.keras.optimizers.SGD(args.opti.lr_fs)
     model = Model(args, optimizer=optimizer, name='fc')
     model.summary()
 
@@ -119,23 +121,30 @@ def train(Model):
         model.set_weights(weights_new)
 
         used_time = time()-run_model_time
-        print('full training loss: {:.3f}, spend {:.2f}s step {}'.format(np.mean(-rewards), used_time, global_step))
+        if global_step % 10 == 0:
+            print('full training loss: {:.3f}, spend {:.2f}s step {}'.format(np.mean(-rewards), used_time, global_step))
 
         if global_step % args.dev_step == 0:
             evaluation(tfdata_dev, model)
-        # if global_step % args.fs_step == 0:
-        #     fs_constrain(tfdata_monitor, model, optimizer)
+        if global_step % args.fs_step == 0:
+            fs_constrain(tfdata_monitor, model, optimizer)
             # sigma *= 0.9
             # lr *= 0.9
-        # if global_step % args.decode_step == 0:
-        #     decode(model)
+        if global_step % args.decode_step == 0:
+            decode(model)
         if global_step % args.save_step == 0:
             ckpt_manager.save()
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
+aligns_sampled = kernel = None
 
 def train_mul(Model):
+
+    lr = args.opti.lr
+    sigma = args.opti.sigma
+    size_population = args.opti.population
+
     # create dataset and dataloader
     with tf.device("/cpu:0"):
         tfdata_dev = TFData(dataset=None,
@@ -154,11 +163,33 @@ def train_mul(Model):
     ngram_py, total_num = read_ngram(args.data.k, args.dirs.ngram, args.token2idx, type='list')
 
     # create model paremeters
-    optimizer = tf.keras.optimizers.Adam(args.opti.lr_fs)
+    optimizer = tf.keras.optimizers.SGD(args.opti.lr_fs)
     model = Model(args, optimizer=optimizer, name='fc')
     model.summary()
 
+    queue_input = Queue(maxsize=9999)
+    queue_output = Queue(maxsize=9999)
+
+    def thread_session(thread_id, queue_input, queue_output):
+        global aligns_sampled, kernel
+        model = Model(args, optimizer=optimizer, name='fc'+str(thread_id))
+        print('thread_{} is waiting to run....'.format(thread_id))
+        while True:
+            x, weights = queue_input.get()
+            model.set_weights(weights)
+            logits = model(x, training=False)
+            pz, K = model.EODM(logits, aligns_sampled, kernel)
+            queue_output.put((pz, K))
+
+    for id in range(args.num_threads):
+        thread = threading.Thread(
+            target=thread_session,
+            args=(id, queue_input, queue_output))
+        thread.daemon = True
+        thread.start()
+
     def get_rewards(list_models):
+        global aligns_sampled, kernel
         list_pz = [[] for _ in range(len(list_models))]
         list_K = [[] for _ in range(len(list_models))]
 
@@ -170,10 +201,11 @@ def train_mul(Model):
             aligns_sampled = sampleFrames(aligns)
             ngram_sampled = sample(ngram_py, args.data.top_k)
             kernel, py = ngram2kernel(ngram_sampled, args)
-            for i, weights in enumerate(list_models):
-                model.set_weights(weights)
-                logits = model(x, training=False)
-                pz, K = model.EODM(logits, aligns_sampled, kernel)
+
+            [queue_input.put((x, list_models[i])) for i in range(size_population)]
+
+            for i in range(size_population):
+                pz, K = queue_output.get()
                 list_pz[i].append(pz)
                 list_K[i].append(K)
 
@@ -192,12 +224,9 @@ def train_mul(Model):
 
     best_rewards = -999
     start_time = datetime.now()
-    lr = args.opti.lr
-    sigma = args.opti.sigma
-    size_population = args.opti.population
 
     for global_step in range(99999):
-        run_model_time = time()
+        start = time()
         # build compute model on-the-fly
         population = []
         weights_model = model.get_weights()
@@ -212,9 +241,10 @@ def train_mul(Model):
             weights_population.append(get_model_weights(weights_model, population[i], sigma))
 
         # analyse feedbacks
+        model_time = time()
         rewards = get_rewards(weights_population)
+        run_model_time = time() - model_time
         _rewards = (rewards - np.mean(rewards)) / (np.std(rewards)+1e-11)
-
 
         # merge weights
         weights_new = []
@@ -226,17 +256,17 @@ def train_mul(Model):
             weights_new.append(w + lr/(size_population*sigma) * tf.reshape(tf.matmul(_rewards, A), shape_out))
         model.set_weights(weights_new)
 
-        used_time = time()-run_model_time
-        print('full training loss: {:.3f}, spend {:.2f}s step {}'.format(np.mean(-rewards), used_time, global_step))
+        used_time = time()-start
+        print('full training loss: {:.3f}, spend {:.2f}|{:.2f}s \tstep {}'.format(np.mean(-rewards), run_model_time, used_time, global_step))
 
         if global_step % args.dev_step == 0:
             evaluation(tfdata_dev, model)
-        # if global_step % args.fs_step == 0:
-        #     fs_constrain(tfdata_monitor, model, optimizer)
+        if global_step % args.fs_step == 0:
+            fs_constrain(tfdata_monitor, model, optimizer)
             # sigma *= 0.9
             # lr *= 0.9
-        # if global_step % args.decode_step == 0:
-        #     decode(model)
+        if global_step % args.decode_step == 0:
+            decode(model)
         if global_step % args.save_step == 0:
             ckpt_manager.save()
 
@@ -271,14 +301,43 @@ def evaluation(tfdata_dev, model):
             np.mean(list_loss), 1-np.mean(list_acc), cer, (time()-start_time)/60, num_processed, args.data.dev_size))
 
 
+def decode(model):
+    dataset = ASR_align_DataSet(
+        file=[args.dirs.dev.data],
+        args=args,
+        _shuffle=False,
+        transform=True)
+    sample = dataset[0]
+    x = np.array([sample['feature']], dtype=np.float32)
+    logits = model(x, training=False)
+    predits = model.get_predicts(logits)
+    print('predict: \n', predits.numpy()[0])
+    print('label: \n', sample['label'])
+    print('align: ', sample['align'])
+
+
 def fs_constrain(tfdata, model, optimizer):
     batch = next(tfdata)
     x, y, aligns = batch
     with tf.GradientTape() as tape:
         logits = model(x, training=True)
         loss = model.frames_constrain_loss(logits, aligns)
+    print('fs loss: ', loss.numpy())
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+
+def head_tail_constrain(batch, model, optimizer):
+    x, y, aligns = batch
+    # build compute model on-the-fly
+    y = tf.ones_like(y) * y[0][0]
+    with tf.GradientTape() as tape:
+        logits = model(x, training=True)
+        loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
+
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
 
 
 if __name__ == '__main__':
@@ -303,5 +362,6 @@ if __name__ == '__main__':
         os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
         print('enter the TRAINING phrase')
         train(Model)
+        # train_mul(Model)
 
-        # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
+        # python main_es.py --gpu 1 -c configs/timit_es.yaml

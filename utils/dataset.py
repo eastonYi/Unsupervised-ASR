@@ -70,7 +70,7 @@ class ASR_align_DataSet(ASRDataSet):
         return sample
 
     def get_full_align(self, seq_label, align, len_feature=None):
-        time = 0
+        time = -1
         full_align = []
         for label, now in zip(seq_label, align):
             duration = now - time

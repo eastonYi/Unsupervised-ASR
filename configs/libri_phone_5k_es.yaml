@@ -30,28 +30,29 @@ model:
     structure: fc
     training_type: teacher-forcing
     loss_type: CE
-    num_hidden: 128
-    num_layers: 1
+    num_hidden: 256
+    num_layers: 2
 
 opti:
     lr: 0.005
     population: 50
     sigma: 0.02
 
-dev_step: 10
-decode_step: 50
-save_step: 20
+dev_step: 50
+decode_step: 100
+save_step: 50
 
 gpus: '0'
 # gpus: '0,1,2,3'
 num_batch_tokens: 120000
 bucket_boundaries: 81,91,101,111,122,134,149,169,224,363,1000
-batch_size: 500
-batch_multi: 5
+batch_size: 1000
+batch_multi: 3
 num_epochs: 100000
 num_steps: 500000
+fs_step: 50
 
 length_penalty_weight: 0.0
-lambda_fs: 0.000001
+lambda_fs: 0.00001
 
 grad_clip_global_norm: 0.0

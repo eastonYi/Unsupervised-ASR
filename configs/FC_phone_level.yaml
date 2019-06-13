@@ -45,12 +45,12 @@ opti:
     beam_size: 1
 
 dev_step: 50
-decode_step: 10
+decode_step: 200
 save_step: 50
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 1500
+batch_size: 20
 num_batch_tokens: 10
 bucket_boundaries: 1,2,3
 num_epochs: 100000
