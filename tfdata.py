@@ -23,14 +23,14 @@ def main():
                     dataAttr=['feature', 'label', 'align'],
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    # tfdata_train.save('0')
-    # tfdata_dev.save('0')
+    tfdata_train.save('0')
+    tfdata_dev.save('0')
     # for sample in tfdata_dev.read():
     # for sample in dataset_train:
     #     print(sample['align'])
     #     print(sample['label'])
     #     import pdb; pdb.set_trace()
-    dataset_train.get_dataset_ngram(n=args.data.ngram, k=10000, savefile=args.dirs.ngram)
+    # dataset_train.get_dataset_ngram(n=args.data.ngram, k=10000, savefile=args.dirs.ngram)
     # import pdb; pdb.set_trace()
     # print()
 

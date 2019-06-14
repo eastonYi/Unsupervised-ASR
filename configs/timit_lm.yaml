@@ -1,0 +1,43 @@
+dirs:
+    train:
+        data: /home/user/easton/data/TIMIT/train_phone39.csv
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train_39
+    dev:
+        data: /home/user/easton/data/TIMIT/test_phone39.csv
+        tfdata: /home/user/easton/data/TIMIT/tfdata/dev_39
+    test:
+        data: /home/user/easton/data/TIMIT/test_phone39.csv
+    type: csv
+    vocab: /home/user/easton/data/TIMIT/phone39.list
+    # restore: /home/user/easton/projects/EODM/models/timit_test/checkpoint
+
+data:
+    dim_embedding: 64
+    unit: word
+
+model:
+    structure: lstm
+    training_type: teacher-forcing
+    loss_type: CE
+    num_hidden: 128
+    num_layers: 2
+
+opti:
+    type: adam
+    warmup_steps: 100
+    peak: 0.001
+    decay_steps: 1000
+
+dev_step: 50
+decode_step: 200
+save_step: 50
+
+gpus: '0'
+# gpus: '1,2,3'
+batch_size: 1000
+num_batch_tokens: 10
+bucket_boundaries: 40,50,60,70,80,90
+num_epochs: 100000
+num_steps: 500000
+
+grad_clip_global_norm: 0.0

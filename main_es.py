@@ -99,17 +99,6 @@ def train(Model):
         rewards = get_rewards(weights_population)
         _rewards = (rewards - np.mean(rewards)) / (np.std(rewards)+1e-11)
 
-        # analyse exploration quality
-        # if max(rewards) > best_rewards:
-        #     best_rewards = np.mean(rewards)
-        #     sigma = args.opti.sigma
-        #     size_population = args.opti.population
-        # else:
-        #     sigma *=2
-        #     size_population += 50
-        #     print('give up this update')
-        #     continue
-
         # merge weights
         weights_new = []
         for index, w in enumerate(weights_model):
@@ -119,15 +108,16 @@ def train(Model):
             A = tf.reshape(A, [size_population, -1])
             weights_new.append(w + lr/(size_population*sigma) * tf.reshape(tf.matmul(_rewards, A), shape_out))
         model.set_weights(weights_new)
+        FER = wipe_off(next(tfdata_monitor), model, optimizer)
 
         used_time = time()-run_model_time
-        if global_step % 10 == 0:
-            print('full training loss: {:.3f}, spend {:.2f}s step {}'.format(np.mean(-rewards), used_time, global_step))
+        if global_step % 1 == 0:
+            print('full training loss: {:.3f}, FER: {:.3f} spend {:.2f}s step {}'.format(np.mean(-rewards), FER, used_time, global_step))
 
         if global_step % args.dev_step == 0:
             evaluation(tfdata_dev, model)
         if global_step % args.fs_step == 0:
-            fs_constrain(tfdata_monitor, model, optimizer)
+            fs_constrain(next(tfdata_monitor), model, optimizer)
             # sigma *= 0.9
             # lr *= 0.9
         if global_step % args.decode_step == 0:
@@ -316,8 +306,7 @@ def decode(model):
     print('align: ', sample['align'])
 
 
-def fs_constrain(tfdata, model, optimizer):
-    batch = next(tfdata)
+def fs_constrain(batch, model, optimizer):
     x, y, aligns = batch
     with tf.GradientTape() as tape:
         logits = model(x, training=True)
@@ -327,18 +316,22 @@ def fs_constrain(tfdata, model, optimizer):
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 
-def head_tail_constrain(batch, model, optimizer):
+def wipe_off(batch, model, optimizer):
     x, y, aligns = batch
     # build compute model on-the-fly
-    y = tf.ones_like(y) * y[0][0]
-    with tf.GradientTape() as tape:
-        logits = model(x, training=True)
-        loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
+    logits = model(x, training=False)
+    acc = model.align_accuracy(logits, y, aligns, full_align=args.data.full_align)
+    if 1-acc > 0.85:
+        y = tf.ones_like(y) * y[0][0]
+        with tf.GradientTape() as tape:
+            logits = model(x, training=True)
+            loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
 
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        decode(model)
 
-
+    return 1-acc
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
