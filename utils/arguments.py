@@ -58,3 +58,7 @@ try:
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']
 except:
     print("have not converted to tfdata yet: ")
+
+if args.dirs.lm_config:
+    args.args_lm = AttrDict(yaml.load(open(args.dirs.lm_config), Loader=yaml.SafeLoader))
+    args.args_lm.dim_output = len(args.token2idx)

@@ -6,9 +6,7 @@ import tensorflow as tf
 # tf.debugging.set_log_device_placement(True)
 tf.config.gpu.set_per_process_memory_growth(True)
 import numpy as np
-from tqdm import tqdm
 from random import sample
-from nltk import FreqDist
 import threading
 from queue import Queue
 
@@ -73,6 +71,8 @@ def train(Model):
         latest_checkpoint = tf.train.CheckpointManager(ckpt, args.dirs.restore, max_to_keep=1).latest_checkpoint
         ckpt.restore(latest_checkpoint)
         print('{} restored!!'.format(latest_checkpoint))
+    else:
+        head_tail_constrain(batch, model, optimizer)
 
     best_rewards = -999
     start_time = datetime.now()
@@ -108,18 +108,15 @@ def train(Model):
             A = tf.reshape(A, [size_population, -1])
             weights_new.append(w + lr/(size_population*sigma) * tf.reshape(tf.matmul(_rewards, A), shape_out))
         model.set_weights(weights_new)
-        FER = wipe_off(next(tfdata_monitor), model, optimizer)
 
         used_time = time()-run_model_time
         if global_step % 1 == 0:
-            print('full training loss: {:.3f}, FER: {:.3f} spend {:.2f}s step {}'.format(np.mean(-rewards), FER, used_time, global_step))
+            print('full training loss: {:.3f}, spend {:.2f}s step {}'.format(np.mean(-rewards), used_time, global_step))
 
         if global_step % args.dev_step == 0:
             evaluation(tfdata_dev, model)
         if global_step % args.fs_step == 0:
             fs_constrain(next(tfdata_monitor), model, optimizer)
-            # sigma *= 0.9
-            # lr *= 0.9
         if global_step % args.decode_step == 0:
             decode(model)
         if global_step % args.save_step == 0:
@@ -316,22 +313,18 @@ def fs_constrain(batch, model, optimizer):
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 
-def wipe_off(batch, model, optimizer):
+def head_tail_constrain(batch, model, optimizer):
     x, y, aligns = batch
     # build compute model on-the-fly
-    logits = model(x, training=False)
-    acc = model.align_accuracy(logits, y, aligns, full_align=args.data.full_align)
-    if 1-acc > 0.85:
-        y = tf.ones_like(y) * y[0][0]
-        with tf.GradientTape() as tape:
-            logits = model(x, training=True)
-            loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
+    y = tf.ones_like(y) * y[0][0]
+    with tf.GradientTape() as tape:
+        logits = model(x, training=True)
+        loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
+        loss *= 50
 
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        decode(model)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-    return 1-acc
 
 if __name__ == '__main__':
     from argparse import ArgumentParser

@@ -4,22 +4,23 @@ dirs:
         # data: /home/user/easton/data/AISHELL/tfdata/train_39/1.csv
         tfdata: /home/user/easton/data/AISHELL/tfdata/train_67
     dev:
-        data: /home/user/easton/data/AISHELL/test_phone_67.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_67
+        data: /home/user/easton/data/AISHELL/dev_phone_1k.csv
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_1k
     test:
         data: /home/user/easton/data/AISHELL/test_phone_67.csv
     type: csv
     vocab: /home/user/easton/data/AISHELL/phones_67.txt
     ngram: /home/user/easton/projects/asr-tf2/data/110k_67.ngram
     # ngram: /home/user/easton/projects/asr-tf2/data/110k_67.10gram
-    # restore: /home/user/easton/projects/EODM/models/aishell_phone67/checkpoint/
+    # restore: /home/user/easton/projects/EODM/models/aishell_phone67/checkpoint/\
+    lm_config: /home/user/easton/projects/EODM/configs/aishell_lm2.yaml
 
 data:
-    featType: fbank
+    featType: mfcc
     dim_raw_input: 13
-    num_context: 10
-    downsample: 4
-    add_delta: False
+    num_context: 5
+    downsample: 2
+    add_delta: True
     unit: phone
     full_align: True
     ngram: 5
@@ -35,29 +36,29 @@ model:
 
 opti:
     type: adam
-    warmup_steps: 100
-    peak: 0.0005
-    decay_steps: 2000
+    warmup_steps: 500
+    peak: 0.0008
+    decay_steps: 10000
     # beam_size: 50
     num_threads: 8
 
-dev_step: 50
-decode_step: 100
+dev_step: 200
+decode_step: 200
 save_step: 100
-fs_step: 200
+fs_step: 80
 
 gpus: '0'
 # gpus: '0,1,2,3'
-num_batch_tokens: 120000
-batch_size: 2600
-# batch_size: 1000
-bucket_boundaries: 81,91,101,111,122,134,149,169,224,363,1000
+num_batch_tokens: 250000
+# batch_size: 600
+batch_size: 1000
+bucket_boundaries: 161,182,202,223,245,269,298,336,431,726,1000
 
 num_epochs: 100000
 num_steps: 500000
 
 length_penalty_weight: 0.0
 lambda_l2: 0.0
-lambda_fs: 0.000001
+lambda_fs: 0.00001
 
 grad_clip_global_norm: 0.0

@@ -29,6 +29,13 @@ def train(Model):
     tfdata_dev = tf.data.Dataset.from_generator(
         dataset_dev, (tf.int32, tf.int32), (tf.TensorShape([None]), tf.TensorShape([None])))
 
+    # transformation_func = tf.data.experimental.bucket_by_sequence_length(
+    #     element_length_func=lambda x,*y: tf.shape(x)[0],
+    #     bucket_boundaries=args.list_bucket_boundaries,
+    #     bucket_batch_sizes=args.list_batch_size,
+    #     padded_shapes=([None, args.dim_input], [None], [None]))
+
+    # tfdata_train = tfdata_train.repeat().shuffle(500).apply(transformation_func).prefetch(buffer_size=5)
     tfdata_train = tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size, ([None], [None])).prefetch(buffer_size=5)
     tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None], [None]))
 
@@ -141,7 +148,7 @@ if __name__ == '__main__':
     print('CUDA_VISIBLE_DEVICES: ', args.gpus)
 
     if args.model.structure == 'lstm':
-        from utils.model import LSTM_Model as Model
+        from utils.model import Embed_LSTM_Model as Model
 
     if param.mode == 'train':
         os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu

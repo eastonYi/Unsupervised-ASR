@@ -1,0 +1,46 @@
+dirs:
+    train:
+        data: /home/user/easton/data/AISHELL/train_phone_67.csv
+        # data: /home/user/easton/data/AISHELL/tfdata/train_39/1.csv
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train_67
+    dev:
+        data: /home/user/easton/data/AISHELL/test_phone_67.csv
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_67
+    test:
+        data: /home/user/easton/data/AISHELL/test_phone_67.csv
+    type: csv
+    vocab: /home/user/easton/data/AISHELL/phones_67.txt
+    ngram: /home/user/easton/projects/asr-tf2/data/110k_67.ngram
+    # ngram: /home/user/easton/projects/asr-tf2/data/110k_67.10gram
+    restore: /home/user/easton/projects/EODM/models/aishell_lm2/checkpoint/
+
+data:
+    dim_embedding: 64
+    unit: word
+
+model:
+    structure: lstm
+    training_type: teacher-forcing
+    loss_type: CE
+    num_hidden: 256
+    num_layers: 3
+
+opti:
+    type: adam
+    warmup_steps: 100
+    peak: 0.001
+    decay_steps: 2000
+
+dev_step: 50
+decode_step: 100
+save_step: 100
+
+gpus: '0'
+# gpus: '0,1,2,3'
+num_batch_tokens: 120000
+batch_size: 2400
+# batch_size: 1000
+bucket_boundaries: 50,60,80,90,100,120
+
+num_epochs: 100000
+num_steps: 500000
