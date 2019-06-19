@@ -119,25 +119,22 @@ def train(Model):
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read(_shuffle=False)
 
-        tfdata_train = tfdata_train.repeat().shuffle(1000).\
-            padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=100)
+        tfdata_train = tfdata_train.cache().repeat().shuffle(1000).\
+            padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=3)
         tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
 
     # get dataset ngram
     ngram_py, total_num = read_ngram(args.data.k, args.dirs.ngram, args.token2idx, type='list')
 
     # build optimizer
-    warmup = warmup_exponential_decay(
-        warmup_steps=args.opti.warmup_steps,
-        peak=args.opti.peak,
-        decay_steps=args.opti.decay_steps)
-    optimizer = build_optimizer(warmup, args.opti.type)
+    opti_adam = build_optimizer(args, type='adam')
+    opti_sgd = build_optimizer(args, lr=0.5, type='sgd')
 
     # create model paremeters
-    model = Model(args, optimizer=optimizer, name='fc')
+    model = Model(args, optimizer=opti_adam, name='fc')
     model.summary()
-    # save & reload
-    ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer)
+    # save & reloadG
+    ckpt = tf.train.Checkpoint(model=model, optimizer=opti_adam)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     if args.dirs.restore:
         latest_checkpoint = tf.train.CheckpointManager(ckpt, args.dirs.restore, max_to_keep=1).latest_checkpoint
@@ -149,30 +146,44 @@ def train(Model):
     num_processed = 0
     progress = 0
 
-    for global_step, batch in enumerate(tfdata_train):
-        x, y, aligns = batch
-        aligns_sampled = sampleFrames(aligns)
-        ngram_sampled = sample(ngram_py, args.data.top_k)
-        kernel, py = ngram2kernel(ngram_sampled, args)
-        run_model_time = time()
-        # build compute model on-the-fly
-        with tf.GradientTape(watch_accessed_variables=False) as tape:
-            tape.watch(model.variables)
-            logits = model(x, training=True)
-            loss_EODM = model.EODM_loss(logits, aligns_sampled, kernel, py)
-            loss = loss_EODM
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        acc = model.align_accuracy(logits, y, aligns, full_align=args.data.full_align)
+    print('pre-training ...')
+    # opti_pre = tf.keras.optimizers.SGD(0.015)
+    fer = 1.0
+    seed = 5000
+    step = 0
+    for batch in tfdata_train:
+        if fer < 0.7:
+            break
+        elif fer > 0.77 or step > 99:
+            print(seed, '-th reset', fer)
+            seed += 1
+            step = 0
+            tf.random.set_seed(seed)
+            opti_adam = build_optimizer(args, type='adam')
+            model = Model(args, optimizer=opti_adam, name='fc')
+            opti_sgd = build_optimizer(args, lr=1.0, type='sgd')
+            head_tail_constrain(batch, model, opti_sgd)
+            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_py)
+        else:
+            step += 1
+            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_py)
+            print('\tloss: {:.3f}\tFER: {:.3f}\tadam lr: {:.3f} sgd lr: {:.3f}'.\
+                  format(loss_EODM.numpy(), fer.numpy(), opti_adam._decayed_lr(tf.float32).numpy(), opti_sgd._decayed_lr(tf.float32).numpy()))
 
-        num_processed += len(x)
+    for global_step, batch in enumerate(tfdata_train):
+        if global_step % args.save_step == 0:
+            ckpt_manager.save()
+        run_model_time = time()
+        loss_EODM, fer, shape_x = train_step(model, opti_adam, batch, ngram_py)
+
+        num_processed += shape_x[0]
         get_data_time = run_model_time - get_data_time
         run_model_time = time() - run_model_time
 
         progress = num_processed / args.data.train_size
         if global_step % 10 == 0:
             print('EODM loss: {:.2f}\t FER: {:.3f}\t batch: {} lr:{:.6f} time: {:.2f}|{:.2f} s {:.3f}% step: {}'.format(
-                   loss_EODM, 1-acc, x.shape, warmup(global_step*1.0).numpy(), get_data_time, run_model_time, progress*100.0, global_step))
+                   loss_EODM, fer, shape_x, opti_adam._decayed_lr(tf.float32).numpy(), get_data_time, run_model_time, progress*100.0, global_step))
         get_data_time = time()
 
         if global_step % args.dev_step == 0:
@@ -180,11 +191,7 @@ def train(Model):
         if global_step % args.decode_step == 0:
             decode(model)
         if global_step % args.fs_step == 0:
-            fs_constrain(batch, model, optimizer)
-        if 1-acc > 0.83:
-            head_tail_constrain(batch, model, optimizer)
-        if global_step % args.save_step == 0:
-            ckpt_manager.save()
+            fs_constrain(batch, model, opti_sgd)
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
@@ -201,8 +208,8 @@ def evaluation(tfdata_dev, model):
     for batch in tfdata_dev:
         x, y, aligns = batch
         logits = model(x, training=False)
-        loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
-        acc = model.align_accuracy(logits, y, aligns, full_align=args.data.full_align)
+        loss = model.align_loss(logits, y, args.dim_output, confidence=0.9)
+        acc = model.align_accuracy(logits, y)
         list_loss.append(loss)
         list_acc.append(acc)
         preds = model.get_predicts(logits)
@@ -279,11 +286,28 @@ def head_tail_constrain(batch, model, optimizer):
     y = tf.ones_like(y) * y[0][0]
     with tf.GradientTape() as tape:
         logits = model(x, training=True)
-        loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
-        loss *= 50
+        loss = model.align_loss(logits, y, args.dim_output, confidence=0.9)
+        # loss *= 50
 
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+
+def train_step(model, optimizer, batch, ngram_py):
+    x, y, aligns = batch
+    aligns_sampled = sampleFrames(aligns)
+    kernel, py = ngram2kernel(ngram_py, args)
+    # build compute model on-the-fly
+    with tf.GradientTape(watch_accessed_variables=False) as tape:
+        tape.watch(model.variables)
+        logits = model(x, training=True)
+        loss_EODM = model.EODM_loss(logits, aligns_sampled, kernel, py)
+        loss = loss_EODM
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    acc = model.align_accuracy(logits, y)
+
+    return loss, 1-acc, x.shape
 
 
 def lm_assistant(Model, Model_LM):
@@ -355,7 +379,7 @@ def lm_assistant(Model, Model_LM):
         with tf.GradientTape(watch_accessed_variables=False) as tape:
             tape.watch(model.variables)
             logits = model(x, training=True)
-            loss = model.align_loss(logits, y, aligns, full_align=args.data.full_align)
+            loss = model.align_loss(logits, y)
             # loss_EODM = model.EODM_loss(logits, aligns_sampled, kernel, py)
             loss_LM = model_lm.compute_fitting_loss(logits, aligns_sampled)
             # loss_LM = 0
@@ -363,7 +387,7 @@ def lm_assistant(Model, Model_LM):
             # loss = loss_EODM + loss_LM
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        acc = model.align_accuracy(logits, y, aligns, full_align=args.data.full_align)
+        acc = model.align_accuracy(logits, y)
 
         num_processed += len(x)
         get_data_time = run_model_time - get_data_time
@@ -429,17 +453,12 @@ if __name__ == '__main__':
 
     print('CUDA_VISIBLE_DEVICES: ', args.gpus)
 
-    if args.model.structure == 'fc':
-        from utils.model import FC_Model as Model
-    elif args.model.structure == 'lstm':
-        from utils.model import LSTM_Model as Model
-
     from utils.model import Embed_LSTM_Model as Model_LM
 
     if param.mode == 'train':
         os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
         print('enter the TRAINING phrase')
-        # train(Model)
-        lm_assistant(Model, Model_LM)
+        train(args.Model)
+        # lm_assistant(Model, Model_LM)
 
         # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml

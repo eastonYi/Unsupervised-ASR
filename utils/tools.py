@@ -27,16 +27,21 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
                         peak * 0.5 ** ((global_step - warmup_steps) / decay_steps))
 
 
-def build_optimizer(learning_rate, type='adam'):
+def build_optimizer(args, lr=0.5, type='adam'):
     if type == 'adam':
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            args.opti.peak,
+            decay_steps=args.opti.decay_steps,
+            decay_rate=0.5,
+            staircase=True)
         optimizer = tf.keras.optimizers.Adam(
-            learning_rate,
+            lr_schedule,
             beta_1=0.9,
             beta_2=0.98,
             epsilon=1e-9)
     elif type == 'sgd':
         optimizer = tf.keras.optimizers.SGD(
-            lr=learning_rate,
+            lr=lr,
             momentum=0.9,
             decay=0.98)
 

@@ -10,8 +10,8 @@ dirs:
         data: /home/user/easton/data/LibriSpeech/dev1000.phone.csv
     type: csv
     vocab: /home/user/easton/data/LibriSpeech/phones_42.txt
-    ngram: /home/user/easton/data/LibriSpeech/100h_5k.4gram
-    # ngram: /home/user/easton/data/LibriSpeech/100h_5k.5gram
+    # ngram: /home/user/easton/data/LibriSpeech/100h_5k.4gram
+    ngram: /home/user/easton/data/LibriSpeech/100h_5k.5gram
     # restore: /home/user/easton/projects/EODM/models/libri_phone_5k/checkpoint
     lm_config: /home/user/easton/projects/EODM/configs/libri_lm.yaml
 
@@ -19,13 +19,13 @@ data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 2
+    downsample: 1
     add_delta: True
     unit: phone
     full_align: True
-    ngram: 4
-    top_k: 2000
-    k: 2000
+    ngram: 5
+    top_k: 1000
+    k: 1000
 
 model:
     structure: fc
@@ -36,7 +36,7 @@ model:
 
 opti:
     type: adam
-    warmup_steps: 100
+    warmup_steps: 50
     peak: 0.005
     decay_steps: 1000
 
@@ -49,7 +49,7 @@ gpus: '0'
 # gpus: '0,1,2,3'
 num_batch_tokens: 120000
 bucket_boundaries: 81,91,101,111,122,134,149,169,224,363,1000
-batch_size: 1000
+batch_size: 600
 num_epochs: 100000
 num_steps: 500000
 

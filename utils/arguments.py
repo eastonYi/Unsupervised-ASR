@@ -62,3 +62,12 @@ except:
 if args.dirs.lm_config:
     args.args_lm = AttrDict(yaml.load(open(args.dirs.lm_config), Loader=yaml.SafeLoader))
     args.args_lm.dim_output = len(args.token2idx)
+
+# model
+if args.model.structure == 'fc':
+    from utils.model import FC_Model as Model
+elif args.model.structure == 'lstm':
+    from utils.model import LSTM_Model as Model
+elif args.model.structure == 'conv':
+    from utils.model import Conv_Model as Model
+args.Model = Model

@@ -26,14 +26,15 @@ def main():
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
     # tfdata_train.save('0')
-    tfdata_dev.save('0')
+    # tfdata_dev.save('0')
     # tfdata_train.get_bucket_size(100, True)
     # split_save()
-    # for sample in tfdata_dev.read():
+    for sample in tfdata_dev.read():
     # for sample in dataset_train:
-    #     print(sample['align'])
-    #     print(sample['label'])
-    #     import pdb; pdb.set_trace()
+        # print(sample['feature'].shape)
+        # print(sample['label'])
+        print(sample[0].shape)
+        import pdb; pdb.set_trace()
     # dataset_train.get_dataset_ngram(n=args.data.ngram, k=10000, savefile=args.dirs.ngram)
     # import pdb; pdb.set_trace()
     # print()
