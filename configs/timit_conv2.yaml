@@ -44,7 +44,7 @@ fs_step: 100
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 2000
+batch_size: 1500
 num_batch_tokens: 10
 bucket_boundaries: 40,50,60,70,80,90
 num_epochs: 100000

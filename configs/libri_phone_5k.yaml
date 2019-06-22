@@ -19,13 +19,13 @@ data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 1
+    downsample: 3
     add_delta: True
     unit: phone
     full_align: True
     ngram: 5
-    top_k: 1000
-    k: 1000
+    top_k: 6000
+    k: 6000
 
 model:
     structure: fc
@@ -37,7 +37,7 @@ model:
 opti:
     type: adam
     warmup_steps: 50
-    peak: 0.005
+    peak: 0.001
     decay_steps: 1000
 
 dev_step: 50
@@ -49,7 +49,7 @@ gpus: '0'
 # gpus: '0,1,2,3'
 num_batch_tokens: 120000
 bucket_boundaries: 81,91,101,111,122,134,149,169,224,363,1000
-batch_size: 600
+batch_size: 400
 num_epochs: 100000
 num_steps: 500000
 

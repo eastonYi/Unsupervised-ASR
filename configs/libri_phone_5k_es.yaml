@@ -18,20 +18,20 @@ data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 4
+    downsample: 3
     add_delta: True
     unit: phone
     full_align: True
     ngram: 5
-    top_k: 5000
-    k: 5000
+    top_k: 8000
+    k: 8000
 
 model:
     structure: fc
     training_type: teacher-forcing
     loss_type: CE
-    num_hidden: 256
-    num_layers: 2
+    num_hidden: 128
+    num_layers: 1
 
 opti:
     lr: 0.005

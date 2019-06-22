@@ -19,8 +19,8 @@ data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 1
-    add_delta: False
+    downsample: 2
+    add_delta: True
     unit: phone
     ngram: 5
     top_k: 1000

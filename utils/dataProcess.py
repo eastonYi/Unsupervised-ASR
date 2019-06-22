@@ -154,15 +154,15 @@ def down_sample(features, rate):
 
 
 def process_raw_feature(fea, args):
-    # downsample
-    fea = down_sample(fea, rate=args.data.downsample)
-
     # 1-D, 2-D
     if args.data.add_delta:
         fea = add_delt(fea)
 
     # Splice
     fea = splice(fea, left_num=args.data.num_context, right_num=args.data.num_context)
+
+    # downsample
+    fea = down_sample(fea, rate=args.data.downsample)
 
     return fea
 

@@ -128,12 +128,12 @@ def train(Model):
 
     # build optimizer
     opti_adam = build_optimizer(args, type='adam')
-    opti_sgd = build_optimizer(args, lr=0.5, type='sgd')
+    opti_sgd = build_optimizer(args, lr=1.0, type='sgd')
 
     # create model paremeters
     model = Model(args, optimizer=opti_adam, name='fc')
     model.summary()
-    # save & reloadG
+    # save & reload
     ckpt = tf.train.Checkpoint(model=model, optimizer=opti_adam)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     if args.dirs.restore:
@@ -149,32 +149,34 @@ def train(Model):
     print('pre-training ...')
     # opti_pre = tf.keras.optimizers.SGD(0.015)
     fer = 1.0
-    seed = 5000
+    seed = 999
     step = 0
     for batch in tfdata_train:
-        if fer < 0.7:
+        if fer < 0.72:
             break
-        elif fer > 0.77 or step > 99:
+        elif fer > 0.80 or step > 69:
             print(seed, '-th reset', fer)
             seed += 1
             step = 0
             tf.random.set_seed(seed)
+            ngram_sampled = sample(ngram_py, args.data.top_k)
             opti_adam = build_optimizer(args, type='adam')
             model = Model(args, optimizer=opti_adam, name='fc')
-            opti_sgd = build_optimizer(args, lr=1.0, type='sgd')
+            opti_sgd = build_optimizer(args, lr=0.5, type='sgd')
+            # for _, batch in zip(range(5), tfdata_train):
             head_tail_constrain(batch, model, opti_sgd)
-            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_py)
+            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_sampled)
         else:
             step += 1
-            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_py)
-            print('\tloss: {:.3f}\tFER: {:.3f}\tadam lr: {:.3f} sgd lr: {:.3f}'.\
+            loss_EODM, fer, _ = train_step(model, opti_adam, batch, ngram_sampled)
+            print('\tloss: {:.3f}\tFER: {:.3f}\tadam lr: {:.4f} sgd lr: {:.4f}'.\
                   format(loss_EODM.numpy(), fer.numpy(), opti_adam._decayed_lr(tf.float32).numpy(), opti_sgd._decayed_lr(tf.float32).numpy()))
 
     for global_step, batch in enumerate(tfdata_train):
         if global_step % args.save_step == 0:
             ckpt_manager.save()
         run_model_time = time()
-        loss_EODM, fer, shape_x = train_step(model, opti_adam, batch, ngram_py)
+        loss_EODM, fer, shape_x = train_step(model, opti_adam, batch, ngram_sampled)
 
         num_processed += shape_x[0]
         get_data_time = run_model_time - get_data_time
@@ -286,7 +288,7 @@ def head_tail_constrain(batch, model, optimizer):
     y = tf.ones_like(y) * y[0][0]
     with tf.GradientTape() as tape:
         logits = model(x, training=True)
-        loss = model.align_loss(logits, y, args.dim_output, confidence=0.9)
+        loss = model.align_loss(logits, y, args.dim_output, confidence=0.8)
         # loss *= 50
 
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -301,7 +303,9 @@ def train_step(model, optimizer, batch, ngram_py):
     with tf.GradientTape(watch_accessed_variables=False) as tape:
         tape.watch(model.variables)
         logits = model(x, training=True)
+        # loss = model.align_loss(logits, y, args.dim_output, confidence=0.9)
         loss_EODM = model.EODM_loss(logits, aligns_sampled, kernel, py)
+    # print('loss_EODM: ', loss_EODM.numpy())
         loss = loss_EODM
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))

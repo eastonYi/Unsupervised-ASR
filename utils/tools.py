@@ -33,7 +33,7 @@ def build_optimizer(args, lr=0.5, type='adam'):
             args.opti.peak,
             decay_steps=args.opti.decay_steps,
             decay_rate=0.5,
-            staircase=True)
+            staircase=False)
         optimizer = tf.keras.optimizers.Adam(
             lr_schedule,
             beta_1=0.9,
@@ -128,7 +128,7 @@ def batch_cer(preds, reference):
     return batch_dist, batch_len
 
 
-def get_model_weights(w, p, sigma):
+def pertubated_model_weights(w, p, sigma):
     weights_try = []
     for index, i in enumerate(p):
         jittered = sigma*i

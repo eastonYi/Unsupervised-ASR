@@ -4,51 +4,50 @@ dirs:
         # data: /home/user/easton/data/AISHELL/tfdata/train_39/1.csv
         tfdata: /home/user/easton/data/AISHELL/tfdata/train_9k
     dev:
-        data: /home/user/easton/data/AISHELL/test_phone_67.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_67
+        data: /home/user/easton/data/AISHELL/dev_phone_1k.csv
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_1k
     test:
         data: /home/user/easton/data/AISHELL/test_phone_67.csv
     type: csv
     vocab: /home/user/easton/data/AISHELL/phones_67.txt
-    ngram: /home/user/easton/projects/EODM/data/5k_67.ngram
-    # ngram: /home/user/easton/projects/EODM/data/5k_4gram_67.ngram
-    # ngram: /home/user/easton/projects/EODM/data/5k_67.2gram
-    # ngram: /home/user/easton/projects/EODM/data/9k_67.4gram
-    # ngram: /home/user/easton/projects/EODM/data/9k_67.3gram
+    ngram: /home/user/easton/data/AISHELL/9k.5gram
     # restore: /home/user/easton/projects/EODM/models/aishell_phone_9k/checkpoint_supervised/
 
 data:
     featType: fbank
     dim_raw_input: 13
-    num_context: 10
+    num_context: 5
     downsample: 3
-    add_delta: False
+    add_delta: True
     unit: phone
-    full_align: True
     ngram: 5
-    top_k: 5000
-    k: 5000
+    top_k: 8000
+    k: 8000
 
 model:
     structure: fc
     training_type: teacher-forcing
     loss_type: CE
-    num_hidden: 256
+    num_hidden: 150
     num_layers: 1
 
 opti:
-    lr: 0.005
-    population: 50
-    sigma: 0.05
+    type: adam
+    warmup_steps: 50
+    peak: 0.01
+    decay_steps: 1000
 
-dev_step: 10
-decode_step: 50
-save_step: 5
+dev_step: 100
+decode_step: 100
+save_step: 100
+fs_step: 100
 
-gpus: '0'
-# gpus: '0,1,2,3'
+gpus: '0,1,2,3'
+# gpus: '1,2,3'
+batch_size: 2000
+batch_multi: 1
 num_batch_tokens: 120000
-batch_size: 4000
+batch_size: 500
 # batch_size: 1000
 bucket_boundaries: 91,111,134,169,303,1000
 

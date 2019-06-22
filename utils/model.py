@@ -1,25 +1,24 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D
+from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input
 
 
 class FC_Model(tf.keras.models.Sequential):
 
     def __init__(self, args, optimizer, name='fc_model'):
-        super().__init__([Dense(args.model.num_hidden,
-                                activation='relu',
-                                input_shape=(None, args.dim_input),
-                                # kernel_regularizer=tf.keras.regularizers.l2(args.l2),
-                                # activity_regularizer=tf.keras.regularizers.l1(args.l1)
-                                )]
+        super().__init__([Input((None, args.dim_input))]
                          +
                           [Dense(args.model.num_hidden,
                                  activation='relu',
+                                 kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.05),
+                                 bias_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.05)
                                  # kernel_regularizer=tf.keras.regularizers.l2(args.l2),
                                  # activity_regularizer=tf.keras.regularizers.l1(args.l1)
-                                 ) for _ in range(args.model.num_layers-1)]
+                                 ) for _ in range(args.model.num_layers)]
                          +
                           [Dense(args.dim_output,
                                  activation='linear',
+                                 kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.05),
+                                 bias_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.05)
                                  # kernel_regularizer=tf.keras.regularizers.l2(args.l2),
                                  # activity_regularizer=tf.keras.regularizers.l1(args.l1)
                                  )]
@@ -95,10 +94,14 @@ class FC_Model(tf.keras.models.Sequential):
         pz = tf.reduce_sum(tf.reduce_sum(pz * mask[:, :pz.shape[1], :], 0), 0) / \
              tf.reduce_sum(tf.reduce_sum(mask, 0), 0) # [z]
 
-        loss_z = - py * tf.math.log(pz+1e-9) # batch loss
+        loss_z = - py * tf.math.log(pz+1e-15) # batch loss
         loss = tf.reduce_sum(loss_z)
 
         return loss
+
+    # @tf.function
+    # def __call__(self, *args):
+    #     return super().__call__(*args)
 
     def EODM(self, logits, aligns, kernel):
         """
@@ -228,7 +231,7 @@ class LSTM_Model(tf.keras.models.Sequential):
         pz = tf.reduce_sum(tf.reduce_sum(pz * mask[:, :pz.shape[1], :], 0), 0) / \
              tf.reduce_sum(tf.reduce_sum(mask, 0), 0) # [z]
 
-        loss_z = - py * tf.math.log(pz+1e-9) # batch loss
+        loss_z = - py * tf.math.log(pz+1e-15) # batch loss
         loss = tf.reduce_sum(loss_z)
 
         return loss
@@ -350,7 +353,7 @@ class Conv_Model(tf.keras.models.Sequential):
         pz = tf.reduce_sum(tf.reduce_sum(pz * mask[:, :pz.shape[1], :], 0), 0) / \
              tf.reduce_sum(tf.reduce_sum(mask, 0), 0) # [z]
 
-        loss_z = - py * tf.math.log(pz+1e-9) # batch loss
+        loss_z = - py * tf.math.log(pz+1e-15) # batch loss
         loss = tf.reduce_sum(loss_z)
 
         return loss
@@ -392,7 +395,7 @@ class P_Ngram():
         """
         self.conv_op.set_weights([kernel])
 
-        input_log = tf.math.log(input+1e-9)
+        input_log = tf.math.log(input+1e-15)
         p = tf.exp(self.conv_op(input_log))
 
         return p
