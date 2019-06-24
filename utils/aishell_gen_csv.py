@@ -58,7 +58,7 @@ def pre_processing(fpath, ftrans, fvocab, unit):
 if __name__ == '__main__':
     """
     demo:
-        python utils/aishell_gen_csv.py --dir /home/user/easton/data/AISHELL --trans ~/easton/data/AISHELL/train.phone.frame --vocab /home/user/easton/data/AISHELL/phones.txt --unit phone
+        python utils/aishell_gen_csv.py --dir /data/sxu/easton/data/AISHELL --trans ~/easton/data/AISHELL/train.phone.frame --vocab /data/sxu/easton/data/AISHELL/phones.txt --unit phone
     """
     parser = ArgumentParser()
     parser.add_argument('--dir', type=str, dest='dir', default=None, help='''

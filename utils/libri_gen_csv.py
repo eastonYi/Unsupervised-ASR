@@ -92,7 +92,7 @@ def pre_processing(ali_file, phone_file, wav_dir, dir):
 if __name__ == '__main__':
     """
     demo:
-        python utils/libri_gen_csv.py --dir /home/user/easton/data/LibriSpeech
+        python utils/libri_gen_csv.py --dir /data/sxu/easton/data/LibriSpeech
     """
     parser = ArgumentParser()
     parser.add_argument('--align', type=str, dest='align', default='train.phone.frame')

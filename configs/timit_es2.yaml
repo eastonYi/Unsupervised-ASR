@@ -1,29 +1,28 @@
 dirs:
     train:
-        data: /home/user/easton/data/TIMIT/train_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/tmp/train_39
+        data: /data/sxu/easton/data/TIMIT/train_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_13_5_2_3
     dev:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/tmp/dev_39
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_13_5_2_3
     test:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
-    vocab: /home/user/easton/data/TIMIT/phone39.list
-    ngram: /home/user/easton/projects/EODM/all.ngram
-    # restore: /home/user/easton/projects/EODM/models/FC_phone_level/init_checkpoint
-    # restore: /home/user/easton/projects/EODM/models/FC_phone_level/checkpoint
+    vocab: /data/sxu/easton/data/TIMIT/phone39.list
+    ngram: /data/sxu/easton/projects/EODM/all.ngram
+    # restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/init_checkpoint
+    # restore: /data/sxu/easton/projects/EODM/models/timit_es2/checkpoint
 
 data:
     featType: fbank
     dim_raw_input: 13
     num_context: 5
-    downsample: 1
+    downsample: 2
     add_delta: True
     unit: word
-    full_align: True
     ngram: 5
-    top_k: 1000
-    k: 1000
+    top_k: 5000
+    k: 5000
 
 model:
     structure: fc
@@ -33,23 +32,25 @@ model:
     num_layers: 1
 
 opti:
-    lr: 0.001
-    population: 50
-    sigma: 0.01
-    lr_fs: 0.0000005
+    lr: 0.013
+    population: 100
+    sigma: 0.08
 
-dev_step: 5
-decode_step: 10
-save_step: 5
-fs_step: 20
+dev_step: 50
+decode_step: 100
+save_step: 50
+fs_step: 100
 
-gpus: '0'
+gpus: '0,1,2,3'
 # gpus: '1,2,3'
 batch_size: 1000
-batch_multi: 2
+batch_multi: 4
 num_batch_tokens: 780000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
+num_threads: 2
+
+lambda_fs: 0.00001
 
 grad_clip_global_norm: 0.0

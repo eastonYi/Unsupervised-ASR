@@ -109,7 +109,7 @@ def train_mul(Model):
                         dataAttr=['feature', 'label', 'align'],
                         dir_save=args.dirs.train.tfdata,
                         args=args).read(_shuffle=False)
-        tfdata_monitor = tfdata_monitor.cache().repeat().shuffle(500).padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=5)
+        tfdata_monitor = tfdata_monitor.repeat().shuffle(500).padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=5)
         tfdata_iter = iter(tfdata_monitor)
         tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
 
@@ -138,7 +138,7 @@ def train_mul(Model):
                 queue_output.put((id, pz, K))
                 # print('{} {:.3f}|{:.3f}s'.format(gpu, t-s, time()-s))
 
-    for id in range(4):
+    for id in range(args.num_gpus):
         thread = threading.Thread(
             target=thread_session,
             args=(id, queue_input, queue_output))
@@ -156,14 +156,14 @@ def train_mul(Model):
     best_rewards = -999
     start_time = datetime.now()
     fer = 1.0
-    seed = 999
+    seed = 99999
     step = 0
     global aligns_sampled, kernel
 
     while 1:
-        if fer < 0.72:
+        if fer < 0.70:
             break
-        elif fer > 0.80 or step > 69:
+        elif fer > 0.77 or step > 69:
             print('{}-th reset, pre FER: {:.3f}'.format(seed, fer))
             seed += 1
             step = 0

@@ -1,15 +1,15 @@
 dirs:
     train:
-        data: /home/user/easton/data/TIMIT/train_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train_39
+        data: /data/sxu/easton/data/TIMIT/train_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_39
     dev:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/dev_39
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_39
     test:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
-    vocab: /home/user/easton/data/TIMIT/phone39.list
-    restore: /home/user/easton/projects/EODM/models/timit_lm/checkpoint
+    vocab: /data/sxu/easton/data/TIMIT/phone39.list
+    restore: /data/sxu/easton/projects/EODM/models/timit_lm/checkpoint
 
 data:
     dim_embedding: 64

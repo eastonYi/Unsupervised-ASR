@@ -1,18 +1,18 @@
 dirs:
     train:
-        data: /home/user/easton/data/LibriSpeech/train-clean-100.phone.1k.csv
-        # data: /home/user/easton/data/LibriSpeech/tfdata/train_39/1.csv
-        tfdata: /home/user/easton/data/LibriSpeech/tfdata/train_1k
+        data: /data/sxu/easton/data/LibriSpeech/train-clean-100.phone.1k.csv
+        # data: /data/sxu/easton/data/LibriSpeech/tfdata/train_39/1.csv
+        tfdata: /data/sxu/easton/data/LibriSpeech/tfdata/train_1k
     dev:
-        data: /home/user/easton/data/LibriSpeech/dev1000.phone.csv
-        tfdata: /home/user/easton/data/LibriSpeech/tfdata/dev
+        data: /data/sxu/easton/data/LibriSpeech/dev1000.phone.csv
+        tfdata: /data/sxu/easton/data/LibriSpeech/tfdata/dev
     test:
-        data: /home/user/easton/data/LibriSpeech/dev1000.phone.csv
+        data: /data/sxu/easton/data/LibriSpeech/dev1000.phone.csv
     type: csv
-    vocab: /home/user/easton/data/LibriSpeech/phones_42.txt
-    # ngram: /home/user/easton/data/LibriSpeech/100h_5k.6gram
-    ngram: /home/user/easton/data/LibriSpeech/100h_1k.4gram
-    # restore: /home/user/easton/projects/EODM/models/libri_phone_5k/checkpoint_supervised/
+    vocab: /data/sxu/easton/data/LibriSpeech/phones_42.txt
+    # ngram: /data/sxu/easton/data/LibriSpeech/100h_5k.6gram
+    ngram: /data/sxu/easton/data/LibriSpeech/100h_1k.4gram
+    # restore: /data/sxu/easton/projects/EODM/models/libri_phone_5k/checkpoint_supervised/
 
 data:
     featType: mfcc

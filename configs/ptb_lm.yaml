@@ -1,15 +1,15 @@
 dirs:
     train:
-        data: /home/user/easton/data/PTB/train
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train_39
+        data: /data/sxu/easton/data/PTB/train
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_39
     dev:
-        data: /home/user/easton/data/PTB/valid
-        tfdata: /home/user/easton/data/TIMIT/tfdata/dev_39
+        data: /data/sxu/easton/data/PTB/valid
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_39
     test:
-        data: /home/user/easton/data/PTB/test
+        data: /data/sxu/easton/data/PTB/test
     type: csv
-    vocab: /home/user/easton/data/PTB/vocab_2k.txt
-    # restore: /home/user/easton/projects/EODM/models/timit_test/checkpoint
+    vocab: /data/sxu/easton/data/PTB/vocab_2k.txt
+    # restore: /data/sxu/easton/projects/EODM/models/timit_test/checkpoint
 
 data:
     dim_embedding: 512

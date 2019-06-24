@@ -1,17 +1,17 @@
 dirs:
     train:
-        data: /home/user/easton/data/AISHELL/train_phone_9k.csv
-        # data: /home/user/easton/data/AISHELL/tfdata/train_39/1.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/train_9k
+        data: /data/sxu/easton/data/AISHELL/train_phone_9k.csv
+        # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_9k
     dev:
-        data: /home/user/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_1k
+        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
     test:
-        data: /home/user/easton/data/AISHELL/test_phone_67.csv
+        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
     type: csv
-    vocab: /home/user/easton/data/AISHELL/phones_67.txt
-    ngram: /home/user/easton/data/AISHELL/9k.5gram
-    # restore: /home/user/easton/projects/EODM/models/aishell_phone_9k/checkpoint_supervised/
+    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    ngram: /data/sxu/easton/data/AISHELL/9k.5gram
+    # restore: /data/sxu/easton/projects/EODM/models/aishell_phone_9k/checkpoint_supervised/
 
 data:
     featType: fbank

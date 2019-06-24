@@ -1,19 +1,19 @@
 dirs:
     train:
-        data: /home/user/easton/data/AISHELL/train_phone_67.csv
-        # data: /home/user/easton/data/AISHELL/tfdata/train_39/1.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/train
+        data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
+        # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
     dev:
-        data: /home/user/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_1k
+        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
     test:
-        data: /home/user/easton/data/AISHELL/test_phone_67.csv
+        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
     type: csv
-    vocab: /home/user/easton/data/AISHELL/phones_67.txt
-    ngram: /home/user/easton/projects/asr-tf2/data/110k_67.ngram
-    # ngram: /home/user/easton/projects/asr-tf2/data/110k_67.10gram
-    # restore: /home/user/easton/projects/EODM/models/aishell_phone67/checkpoint/\
-    # lm_config: /home/user/easton/projects/EODM/configs/aishell_lm2.yaml
+    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    ngram: /data/sxu/easton/projects/asr-tf2/data/110k_67.ngram
+    # ngram: /data/sxu/easton/projects/asr-tf2/data/110k_67.10gram
+    # restore: /data/sxu/easton/projects/EODM/models/aishell_phone67/checkpoint/\
+    # lm_config: /data/sxu/easton/projects/EODM/configs/aishell_lm2.yaml
 
 data:
     featType: mfcc

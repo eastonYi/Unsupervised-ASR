@@ -1,22 +1,22 @@
 dirs:
     train:
-        data: /home/user/easton/data/TIMIT/train_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/tmp/train_39
+        data: /data/sxu/easton/data/TIMIT/train_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/tmp/train_39
     dev:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
-        tfdata: /home/user/easton/data/TIMIT/tfdata/tmp/dev_39
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/tmp/dev_39
     test:
-        data: /home/user/easton/data/TIMIT/test_phone39.csv
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
-    vocab: /home/user/easton/data/TIMIT/phone39.list
-    ngram: /home/user/easton/projects/EODM/all.ngram
-    # ngram: /home/user/easton/projects/EODM/all.2gram
-    # ngram: /home/user/easton/projects/EODM/all.3gram
-    # ngram: /home/user/easton/projects/EODM/all.4gram
-    # ngram: /home/user/easton/projects/EODM/all.6gram
-    # ngram: /home/user/easton/projects/EODM/all.9gram
-    restore: /home/user/easton/projects/EODM/models/FC_phone_level/init_checkpoint
-    # restore: /home/user/easton/projects/EODM/models/FC_phone_level/checkpoint
+    vocab: /data/sxu/easton/data/TIMIT/phone39.list
+    ngram: /data/sxu/easton/projects/EODM/all.ngram
+    # ngram: /data/sxu/easton/projects/EODM/all.2gram
+    # ngram: /data/sxu/easton/projects/EODM/all.3gram
+    # ngram: /data/sxu/easton/projects/EODM/all.4gram
+    # ngram: /data/sxu/easton/projects/EODM/all.6gram
+    # ngram: /data/sxu/easton/projects/EODM/all.9gram
+    restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/init_checkpoint
+    # restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/checkpoint
 
 data:
     featType: fbank
