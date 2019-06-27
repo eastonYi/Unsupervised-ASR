@@ -1,8 +1,11 @@
 import tensorflow as tf
 import numpy as np
-import logging
-from collections import defaultdict
 import editdistance as ed
+from pathlib import Path
+from tqdm import tqdm
+from random import shuffle
+import sys
+
 from utils.dataProcess import get_N_gram
 
 
@@ -25,6 +28,176 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
         return tf.where(global_step <= warmup_steps,
                         peak * global_step / warmup_steps,
                         peak * 0.5 ** ((global_step - warmup_steps) / decay_steps))
+
+
+class TFData:
+    """
+    test on TF2.0-alpha
+    """
+    def __init__(self, dataset, dataAttr, dir_save, args, size_file=5000000, max_feat_len=3000):
+        self.dataset = dataset
+        self.dataAttr =  dataAttr # ['feature', 'label', 'align']
+        self.max_feat_len = max_feat_len
+        self.dir_save = dir_save
+        self.args = args
+        self.size_file = size_file
+        self.dim_feature = dataset[0]['feature'].shape[-1] \
+            if dataset else self.read_tfdata_info(dir_save)['dim_feature']
+
+    def save(self, name):
+        num_token = 0
+        num_damaged_sample = 0
+
+        def serialize_example(feature, label, align):
+            atts = {
+                'feature': self._bytes_feature(feature.tostring()),
+                'label': self._bytes_feature(label.tostring()),
+                'align': self._bytes_feature(align.tostring()),
+            }
+            example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
+
+            return example_proto.SerializeToString()
+
+        def generator():
+            for features, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+                # print(features['feature'].shape)
+                yield serialize_example(features['feature'], features['label'], features['align'])
+
+        dataset_tf = tf.data.Dataset.from_generator(
+            generator=generator,
+            output_types=tf.string,
+            output_shapes=())
+
+        writer = tf.data.experimental.TFRecordWriter(str(self.dir_save/'{}.recode'.format(name)))
+        writer.write(dataset_tf)
+
+        with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
+            fw.write('data_file {}\n'.format(self.dataset.file))
+            fw.write('dim_feature {}\n'.format(self.dim_feature))
+            fw.write('num_tokens {}\n'.format(num_token))
+            fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
+            fw.write('damaged samples: {}\n'.format(num_damaged_sample))
+
+        return
+
+    def read(self, _shuffle=False):
+        """
+        the tensor could run unlimitatly
+        """
+        list_filenames = self.fentch_filelist(self.dir_save)
+        if _shuffle:
+            shuffle(list_filenames)
+        else:
+            list_filenames.sort()
+
+        raw_dataset = tf.data.TFRecordDataset(list_filenames)
+
+        def _parse_function(example_proto):
+            features = tf.io.parse_single_example(
+                example_proto,
+                # features={attr: tf.io.FixedLenFeature([], tf.string) for attr in self.dataAttr}
+                features={
+                    'feature': tf.io.FixedLenFeature([], tf.string),
+                    'label': tf.io.FixedLenFeature([], tf.string),
+                    'align': tf.io.FixedLenFeature([], tf.string)
+                }
+            )
+            feature = tf.reshape(tf.io.decode_raw(features['feature'], tf.float32),
+                                 [-1, self.dim_feature])[:self.max_feat_len, :]
+            label = tf.io.decode_raw(features['label'], tf.int32)
+            align = tf.io.decode_raw(features['align'], tf.int32)
+
+            return feature, label, align
+
+        features = raw_dataset.map(_parse_function)
+
+        return features
+
+    def get_bucket_size(self, idx_init, reuse=False):
+
+        f_len_hist = './dataset_len_hist.txt'
+        list_len = []
+
+        if not reuse:
+            dataset = self.read(_shuffle=False)
+            for sample in tqdm(dataset):
+                feature, *_ = sample
+                list_len.append(len(feature))
+
+            hist, edges = np.histogram(list_len, bins=(max(list_len)-min(list_len)+1))
+
+            # save hist
+            with open(f_len_hist, 'w') as fw:
+                for num, edge in zip(hist, edges):
+                    fw.write('{}: {}\n'.format(str(num), str(int(np.ceil(edge)))))
+                    print(str(num), str(int(np.ceil(edge))))
+
+            list_num = []
+            list_length = []
+            with open(f_len_hist) as f:
+                for line in f:
+                    num, length = line.strip().split(':')
+                    list_num.append(int(num))
+                    list_length.append(int(length))
+
+        def next_idx(idx, energy):
+            for i in range(idx, len(list_num), 1):
+                if list_length[i]*sum(list_num[idx+1:i+1]) > energy:
+                    return i-1
+            return
+
+        M = self.args.num_batch_tokens
+        b0 = int(M / list_length[idx_init])
+        k = b0/sum(list_num[:idx_init+1])
+        energy = M/k
+
+        list_batchsize = [b0]
+        list_boundary = [list_length[idx_init]]
+
+        idx = idx_init
+        while idx < len(list_num):
+            idx = next_idx(idx, energy)
+            if not idx:
+                break
+            if idx == idx_init:
+                print('enlarge the idx_init!')
+                sys.exit()
+            list_boundary.append(list_length[idx])
+            list_batchsize.append(int(M / list_length[idx]))
+
+        list_boundary.append(list_length[-1])
+        list_batchsize.append(int(M/list_length[-1]))
+
+        print('suggest boundaries: \n{}'.format(','.join(map(str, list_boundary))))
+        print('corresponding batch size: \n{}'.format(','.join(map(str, list_batchsize))))
+
+    def __len__(self):
+        return self.read_tfdata_info(self.dir_save)['size_dataset']
+
+    @staticmethod
+    def fentch_filelist(dir_data):
+        p = Path(dir_data)
+        assert p.is_dir()
+
+        return [str(i) for i in p.glob('*.recode')]
+
+    @staticmethod
+    def _bytes_feature(value):
+        """Returns a bytes_list from a list of string / byte."""
+        return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+    @staticmethod
+    def read_tfdata_info(dir_save):
+        data_info = {}
+        with open(dir_save/'tfdata.info') as f:
+            for line in f:
+                if 'dim_feature' in line or \
+                    'num_tokens' in line or \
+                    'size_dataset' in line:
+                    line = line.strip().split(' ')
+                    data_info[line[0]] = int(line[1])
+
+        return data_info
 
 
 def build_optimizer(args, lr=0.5, type='adam'):

@@ -1,15 +1,15 @@
 dirs:
     train:
         data: /data/sxu/easton/data/TIMIT/train_phone39.csv
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/tmp/train_39
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_39
     dev:
         data: /data/sxu/easton/data/TIMIT/test_phone39.csv
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/tmp/dev_39
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_39
     test:
         data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.list
-    ngram: /data/sxu/easton/projects/EODM/all.ngram
+    ngram: /data/sxu/easton/data/TIMIT/all.5gram
     # restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/init_checkpoint
     # restore: /data/sxu/easton/projects/EODM/models/timit_es2/checkpoint
 
@@ -20,7 +20,6 @@ data:
     downsample: 1
     add_delta: True
     unit: word
-    full_align: True
     ngram: 5
     top_k: 1300
     k: 1300
@@ -33,16 +32,16 @@ model:
     num_layers: 1
 
 opti:
-    lr: 0.005
+    lr: 0.001
     population: 100
-    sigma: 0.05
+    sigma: 0.08
 
 dev_step: 5
 decode_step: 100
 save_step: 50
-fs_step: 500000
+fs_step: 100
 
-gpus: '0,1,2,3'
+gpus: '1,2,3,4,5'
 # gpus: '1,2,3'
 batch_size: 2000
 batch_multi: 1

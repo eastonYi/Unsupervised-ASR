@@ -10,11 +10,9 @@ from random import sample
 import threading
 from queue import Queue
 
-from eastonCode.tfTools.tfData import TFData
-
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import build_optimizer, sampleFrames, read_ngram, batch_cer, pertubated_model_weights, ngram2kernel
+from utils.tools import build_optimizer, sampleFrames, read_ngram, batch_cer, pertubated_model_weights, ngram2kernel, TFData
 
 
 def train(Model):
@@ -161,7 +159,7 @@ def train_mul(Model):
     global aligns_sampled, kernel
 
     while 1:
-        if fer < 0.70:
+        if fer < 0.69:
             break
         elif fer > 0.77 or step > 69:
             print('{}-th reset, pre FER: {:.3f}'.format(seed, fer))

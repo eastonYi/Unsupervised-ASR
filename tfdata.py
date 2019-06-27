@@ -1,6 +1,6 @@
 #!/usr/bin/env
 # coding=utf-8
-from eastonCode.tfTools.tfData import TFData
+from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
 from pathlib import Path
