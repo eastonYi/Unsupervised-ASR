@@ -1,0 +1,59 @@
+dirs:
+    train:
+        data: /data/sxu/easton/data/TIMIT/train_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_13_5_1_3
+    dev:
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_13_5_1_3
+    test:
+        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+    lm:
+        data: /data/sxu/easton/data/TIMIT/train_phone.txt
+    type: csv
+    vocab: /data/sxu/easton/data/TIMIT/phone39.list
+    # restore: /data/sxu/easton/projects/EODM/models/timit_conv/checkpoint
+    # lm_config: /data/sxu/easton/projects/EODM/configs/timit_lm.yaml
+
+data:
+    featType: fbank
+    dim_raw_input: 13
+    num_context: 5
+    downsample: 1
+    add_delta: True
+    unit: phone
+
+model:
+    G:
+        structure: fc
+        num_hidden: 512
+        num_layers: 1
+    D:
+        num_hidden: 512
+
+opti:
+    type: adam
+    # warmup_steps: 50
+    peak: 0.005
+    decay_steps: 500
+    beam_size: 1
+    G:
+        lr: 0.00005
+    D:
+        lr: 0.00005
+
+dev_step: 50
+decode_step: 50
+save_step: 50
+
+gpus: '0'
+# gpus: '1,2,3'
+batch_size: 400
+num_batch_tokens: 10
+bucket_boundaries: 40,50,60,70,80,90
+num_epochs: 100000
+num_steps: 500000
+
+lambda_fs: 0.00001
+lambda_gp: 10.0
+
+grad_clip_global_norm: 0.0

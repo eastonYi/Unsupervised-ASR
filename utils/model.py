@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input
+from utils.tools import sampleFrames
 
 
 class FC_Model(tf.keras.models.Sequential):
@@ -452,3 +453,145 @@ class Embed_LSTM_Model(tf.keras.models.Sequential):
         ce_loss = tf.reduce_sum(ce_loss) / tf.reduce_sum(label_musk)
 
         return ce_loss
+
+
+def Conv1D(dim_output, kernel_size):
+    conv_op = tf.keras.layers.Conv1D(
+        filters=dim_output,
+        kernel_size=(kernel_size,),
+        strides=1,
+        padding='same',
+        use_bias=True)
+
+    return conv_op
+
+
+def Linear(dim_output):
+    layer = Dense(dim_output, activation=None)
+
+    return layer
+
+
+def ResBlock(inputs, list_Conv1D):
+    output = inputs
+    output = tf.nn.relu(output)
+    output = list_Conv1D[0](output)
+    output = tf.nn.relu(output)
+    output = list_Conv1D[1](output)
+
+    return inputs + (0.3*output)
+
+
+class Generator(tf.keras.Model):
+
+    def __init__(self, dim_hidden, dim_output):
+        super().__init__()
+        self.dim_hidden = dim_hidden
+        self.input_layer = Dense(dim_hidden, activation=None)
+        self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
+                            for _ in range(10)]
+        self.list_Conv1D.append(Conv1D(dim_output=dim_output, kernel_size=1))
+
+        self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
+
+    def call(self, n_samples, SEQ_LEN):
+        output = tf.random.normal(shape=[n_samples, SEQ_LEN, 128])
+        output = self.input_layer(output)
+        for i in range(5):
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
+        output = self.list_Conv1D[-1](output)
+        output = tf.nn.softmax(output)
+
+        return output
+
+
+class Discriminator(tf.keras.Model):
+
+    def __init__(self, dim_hidden):
+        super().__init__()
+        self.dim_hidden = dim_hidden
+        self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
+                            for _ in range(10)]
+        self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
+        self.final_layer = Dense(1, activation=None)
+        # self.final_layer = Conv1D(dim_output=1, kernel_size=1)
+
+        self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
+
+    def call(self, inputs):
+        batch_size = inputs.shape[0]
+        dim_input = inputs.shape[-1]
+        inputs = tf.image.random_crop(inputs, [batch_size, 50, dim_input])
+        output = self.input_layer(inputs)
+        for i in range(5):
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
+        output = tf.reshape(output, [batch_size, -1])
+        output = self.final_layer(output)
+        # output = tf.reduce_mean(output[:, :, 0], -1)
+
+        return output
+
+
+class PhoneClassifier(tf.keras.Model):
+
+    def __init__(self, args):
+        super().__init__()
+        self.list_layers = [Dense(args.model.G.num_hidden, activation='relu')
+                            for _ in range(args.model.G.num_layers)]
+        self.list_layers.append(Dense(args.dim_output, activation='softmax'))
+
+        self.optimizer = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
+
+    def call(self, x, aligns=None):
+        output = x
+        for layer in self.list_layers:
+            output = layer(output)
+        P_G = output
+
+        if aligns is not None:
+            _aligns = sampleFrames(aligns)
+            batch, len_label_max = _aligns.shape
+            batch_idx = tf.tile(tf.range(batch)[:, None], [1, len_label_max])
+            indices = tf.stack([batch_idx, _aligns], -1)
+            _P_G = tf.gather_nd(P_G, indices)
+
+            return _P_G, P_G
+        else:
+            return P_G
+
+    def align_accuracy(self, P_output, labels):
+        mask = tf.cast(labels > 0, dtype=tf.float32)
+
+        predicts = tf.argmax(P_output, axis=-1, output_type=tf.int32)
+        results = tf.cast(tf.equal(predicts, labels), tf.float32)
+
+        results *= mask
+        acc = tf.reduce_sum(results) / tf.reduce_sum(mask)
+
+        return acc
+
+    def get_predicts(self, P_output):
+
+        return tf.argmax(P_output, axis=-1, output_type=tf.int32)
+
+
+class PhoneDiscriminator(tf.keras.Model):
+
+    def __init__(self, args):
+        super().__init__()
+        dim_hidden = args.model.D.num_hidden
+        self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
+                            for _ in range(10)]
+        self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
+        self.final_layer = Conv1D(dim_output=1, kernel_size=1)
+
+        self.optimizer = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
+
+    def call(self, inputs):
+        output = self.input_layer(inputs)
+        for i in range(5):
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
+        output = self.final_layer(output)
+        output = tf.reduce_mean(output[:, :, 0], -1)
+
+        return output

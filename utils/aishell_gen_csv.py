@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from utils.dataProcess import load_wavfile
 
+
 def pre_processing(fpath, ftrans, fvocab, unit):
     # rate, sig = load_wavfile(f_wav)
     # ratio = len(sig)/len(align)

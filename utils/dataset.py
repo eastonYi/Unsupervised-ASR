@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import os
 import numpy as np
 import logging
@@ -190,3 +192,73 @@ class PTB_LMDataSet(LMDataSet):
                     tar_ids = text_ids + [self.end_id]
 
                     yield src_ids, tar_ids
+
+
+class TextDataSet(LMDataSet):
+
+    def __iter__(self):
+        """
+        (Pdb) i
+        [1,18,2,36,1,17,7,9,9,6,25,28,3,5,14,1,11,32,24,16,26,22,3,1,16,15,1,18,8,3,1,4,1]
+        """
+        for filename in self.list_files:
+            with open(filename) as f:
+                for line in f:
+                    line = line.strip().split()
+                    if len(line) > self.args.list_bucket_boundaries[-1]:
+                        continue
+                    text_ids = [self.token2idx[word] for word in line]
+
+                    yield text_ids
+
+
+def load_dataset(max_length, max_n_examples, max_vocab_size=2048, data_dir=''):
+    print("loading dataset...")
+    lines = []
+    finished = False
+
+    for i in range(99):
+        path = data_dir+("/training-monolingual.tokenized.shuffled/news.en-{}-of-00100".format(str(i+1).zfill(5)))
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                line = tuple(line[:-1])
+
+                if len(line) > max_length:
+                    line = line[:max_length]
+
+                lines.append(line + ( ("`",)*(max_length-len(line)) ) )
+
+                if len(lines) == max_n_examples:
+                    finished = True
+                    break
+        if finished:
+            break
+
+    np.random.shuffle(lines)
+
+    counts = collections.Counter(char for line in lines for char in line)
+
+    charmap = {'unk':0}
+    inv_charmap = ['unk']
+
+    for char,count in counts.most_common(max_vocab_size-1):
+        if char not in charmap:
+            charmap[char] = len(inv_charmap)
+            inv_charmap.append(char)
+
+    filtered_lines = []
+    for line in lines:
+        filtered_line = []
+        for char in line:
+            if char in charmap:
+                filtered_line.append(char)
+            else:
+                filtered_line.append('unk')
+        filtered_lines.append(tuple(filtered_line))
+
+    for i in range(10):
+        print(''.join(filtered_lines[i]))
+
+    print("loaded {} lines in dataset".format(len(lines)))
+
+    return filtered_lines, charmap, inv_charmap

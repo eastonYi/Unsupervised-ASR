@@ -334,3 +334,41 @@ def get_preds_ngram(preds, len_preds, n):
     ngrams = get_N_gram(iter_preds(preds, len_preds), n)
 
     return ngrams
+
+
+def gradient_penalty(f, real, fake):
+    def _interpolate(a, b):
+        shape = [tf.shape(a)[0]] + [1] * (a.shape.ndims - 1)
+        alpha = tf.random.uniform(shape=shape, minval=0., maxval=1.)
+        inter = a + alpha * (b - a)
+        inter.set_shape(a.shape)
+        return inter
+
+    min_len = min(real.shape[1], fake.shape[1])
+    x = _interpolate(real[:, :min_len, :], fake[:, :min_len, :])
+    with tf.GradientTape() as t:
+        t.watch(x)
+        pred = f(x)
+    grad = t.gradient(pred, x)
+    norm = tf.norm(tf.reshape(grad, [tf.shape(grad)[0], -1]), axis=1)
+    gp = tf.reduce_mean((norm - 1.)**2)
+
+    return gp
+
+
+def frames_constrain_loss(logits, align):
+    align += 1 # align means the new phone start time step
+    end_time = tf.reduce_max(align, -1)
+    batch_size = logits.shape[0]
+    px_batch = tf.nn.softmax(logits)
+    _frame = None
+    loss = tf.zeros([batch_size], tf.float32)
+    for i, frame in enumerate(tf.unstack(px_batch, axis=1)):
+        if i > 1:
+            pad_mask = tf.less(i, end_time)
+            update_mask = tf.keras.backend.all(tf.not_equal(align, i), -1)
+            mask = tf.cast(tf.logical_and(pad_mask, update_mask), dtype=tf.float32)
+            loss += tf.reduce_mean(tf.pow(_frame-frame, 2), 1) * mask
+        _frame = frame
+
+    return tf.reduce_sum(loss)

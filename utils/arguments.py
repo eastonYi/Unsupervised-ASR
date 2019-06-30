@@ -70,4 +70,6 @@ elif args.model.structure == 'lstm':
     from utils.model import LSTM_Model as Model
 elif args.model.structure == 'conv':
     from utils.model import Conv_Model as Model
+else:
+    Model = None
 args.Model = Model
