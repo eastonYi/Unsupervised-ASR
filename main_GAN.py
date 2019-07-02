@@ -78,8 +78,9 @@ def train(Model):
             x, _, aligns = next(iter_train)
             cost_D, gp = train_D(x, aligns, P_Real, G, D, D.trainable_variables, args.lambda_gp)
 
-        if iteration % 1 == 0:
-            print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tused: {:.3f}'.format(cost_G, fs, cost_D, gp, time()-start))
+        if iteration % 10 == 0:
+            print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tused: {:.3f}\titer: {}'.format(
+                   cost_G, fs, cost_D, gp, time()-start, iteration))
         if iteration % args.dev_step == 0:
             evaluation(tfdata_dev, G)
         if iteration % args.decode_step == 0:

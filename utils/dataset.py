@@ -6,6 +6,8 @@ import logging
 import collections
 from tqdm import tqdm
 from random import shuffle,random
+import multiprocessing
+import tensorflow as tf
 
 from .dataProcess import audio2vector,get_audio_length,process_raw_feature
 from eastonCode.dataProcessing.dataHelper import DataSet,SimpleDataLoader
@@ -262,3 +264,109 @@ def load_dataset(max_length, max_n_examples, max_vocab_size=2048, data_dir=''):
     print("loaded {} lines in dataset".format(len(lines)))
 
     return filtered_lines, charmap, inv_charmap
+
+
+def make_32x32_dataset(dataset, batch_size, drop_remainder=True, shuffle=True, repeat=1):
+
+    if dataset == 'mnist':
+        (train_images, _), (_, _) = tf.keras.datasets.mnist.load_data()
+        train_images.shape = train_images.shape + (1,)
+    elif dataset == 'fashion_mnist':
+        (train_images, _), (_, _) = tf.keras.datasets.fashion_mnist.load_data()
+        train_images.shape = train_images.shape + (1,)
+    elif dataset == 'cifar10':
+        (train_images, _), (_, _) = tf.keras.datasets.cifar10.load_data()
+    else:
+        raise NotImplementedError
+
+    @tf.function
+    def _map_fn(img):
+        img = tf.image.resize(img, [32, 32])
+        img = tf.clip_by_value(img, 0, 255)
+        img = img / 127.5 - 1
+        return img
+
+    dataset = memory_data_batch_dataset(train_images,
+                                       batch_size,
+                                       drop_remainder=drop_remainder,
+                                       map_fn=_map_fn,
+                                       shuffle=shuffle,
+                                       repeat=repeat)
+    img_shape = (32, 32, train_images.shape[-1])
+    len_dataset = len(train_images) // batch_size
+
+    return dataset, img_shape, len_dataset
+
+def batch_dataset(dataset,
+                  batch_size,
+                  drop_remainder=True,
+                  n_prefetch_batch=1,
+                  filter_fn=None,
+                  map_fn=None,
+                  n_map_threads=None,
+                  filter_after_map=False,
+                  shuffle=True,
+                  shuffle_buffer_size=None,
+                  repeat=None):
+    # set defaults
+    if n_map_threads is None:
+        n_map_threads = multiprocessing.cpu_count()
+    if shuffle and shuffle_buffer_size is None:
+        shuffle_buffer_size = max(batch_size * 128, 2048)  # set the minimum buffer size as 2048
+
+    # [*] it is efficient to conduct `shuffle` before `map`/`filter` because `map`/`filter` is sometimes costly
+    if shuffle:
+        dataset = dataset.shuffle(shuffle_buffer_size)
+
+    if not filter_after_map:
+        if filter_fn:
+            dataset = dataset.filter(filter_fn)
+
+        if map_fn:
+            dataset = dataset.map(map_fn, num_parallel_calls=n_map_threads)
+
+    else:  # [*] this is slower
+        if map_fn:
+            dataset = dataset.map(map_fn, num_parallel_calls=n_map_threads)
+
+        if filter_fn:
+            dataset = dataset.filter(filter_fn)
+
+    dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+
+    dataset = dataset.repeat(repeat).prefetch(n_prefetch_batch)
+
+    return dataset
+
+
+def memory_data_batch_dataset(memory_data,
+                              batch_size,
+                              drop_remainder=True,
+                              n_prefetch_batch=1,
+                              filter_fn=None,
+                              map_fn=None,
+                              n_map_threads=None,
+                              filter_after_map=False,
+                              shuffle=True,
+                              shuffle_buffer_size=None,
+                              repeat=None):
+    """Batch dataset of memory data.
+
+    Parameters
+    ----------
+    memory_data : nested structure of tensors/ndarrays/lists
+
+    """
+    dataset = tf.data.Dataset.from_tensor_slices(memory_data)
+    dataset = batch_dataset(dataset,
+                            batch_size,
+                            drop_remainder=drop_remainder,
+                            n_prefetch_batch=n_prefetch_batch,
+                            filter_fn=filter_fn,
+                            map_fn=map_fn,
+                            n_map_threads=n_map_threads,
+                            filter_after_map=filter_after_map,
+                            shuffle=shuffle,
+                            shuffle_buffer_size=shuffle_buffer_size,
+                            repeat=repeat)
+    return dataset

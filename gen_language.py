@@ -6,19 +6,21 @@ from time import time
 
 from utils.dataset import load_dataset
 from utils.model import Generator, Discriminator
+# from tensorflow.keras.layers import Embedding
 np.set_printoptions(precision=4)
 
 
 BATCH_SIZE = 128 # Batch size
 ITERS = 200000 # How many iterations to train for
 SEQ_LEN = 32 # Sequence length in characters
+size_embedding = 512
 DIM = 512 # Model dimensionality. This is fairly slow and overfits, even on
           # Billion Word. Consider decreasing for smaller datasets.
 CRITIC_ITERS = 10 # How many critic iterations per generator iteration. We
                   # use 10 for the results in the paper, but 5 should work fine
                   # as well.
 LAMBDA = 10 # Gradient penalty lambda hyperparameter.
-MAX_N_EXAMPLES = 1000000 # Max number of data examples to load. If data loading
+MAX_N_EXAMPLES = 10000000 # Max number of data examples to load. If data loading
                           # is too slow or takes too much RAM, you can decrease
                           # this (at the expense of having less training data).
 DATA_DIR = '/data/sxu/easton/data/WMT/1-billion-word-language-modeling-benchmark-r13output'
@@ -40,9 +42,8 @@ def main():
                 )
     iter_data = inf_train_gen()
 
-    G = Generator(dim_hidden=DIM, dim_output=len(charmap))
-    D = Discriminator(dim_hidden=DIM)
-    cost_G = 0
+    G = Generator(dim_hidden=DIM, seq_len=SEQ_LEN, dim_output=len(charmap))
+    D = Discriminator(dim_hidden=DIM, seq_len=SEQ_LEN)
 
     for iteration in range(ITERS):
 
@@ -51,15 +52,15 @@ def main():
             D.summary()
 
         start = time()
-        if iteration > 0:
-            cost_G = train_G(G, D, G.trainable_variables)
+
+        cost_G = train_G(G, D, G.trainable_variables)
 
         for _ in range(CRITIC_ITERS):
             text = next(iter_data)
             cost_D, gp = train_D(text, charmap, G, D, D.trainable_variables)
 
         if iteration % 1 == 0:
-            fake_inputs = G(1, 20)
+            fake_inputs = G(1, SEQ_LEN)
             fake_inputs_discrete = tf.argmax(fake_inputs[0], -1)
             print('cost_G: {:.3f}\t cost_D: {:.3f}|{:.3f}\t used: {:.3f}'.format(cost_G, cost_D, gp, time()-start))
             print(''.join(inv_charmap[i] for i in text[0]), ' || ', ''.join(inv_charmap[i] for i in fake_inputs_discrete))

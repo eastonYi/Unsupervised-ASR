@@ -466,12 +466,6 @@ def Conv1D(dim_output, kernel_size):
     return conv_op
 
 
-def Linear(dim_output):
-    layer = Dense(dim_output, activation=None)
-
-    return layer
-
-
 def ResBlock(inputs, list_Conv1D):
     output = inputs
     output = tf.nn.relu(output)
@@ -484,10 +478,12 @@ def ResBlock(inputs, list_Conv1D):
 
 class Generator(tf.keras.Model):
 
-    def __init__(self, dim_hidden, dim_output):
+    def __init__(self, dim_hidden, seq_len, dim_output):
         super().__init__()
         self.dim_hidden = dim_hidden
-        self.input_layer = Dense(dim_hidden, activation=None)
+        self.seq_len = seq_len
+        self.dim_output = dim_output
+        self.input_layer = Dense(dim_hidden*seq_len, activation=None)
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
                             for _ in range(10)]
         self.list_Conv1D.append(Conv1D(dim_output=dim_output, kernel_size=1))
@@ -495,8 +491,9 @@ class Generator(tf.keras.Model):
         self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
 
     def call(self, n_samples, SEQ_LEN):
-        output = tf.random.normal(shape=[n_samples, SEQ_LEN, 128])
+        output = tf.random.normal(shape=[n_samples, 128])
         output = self.input_layer(output)
+        output = tf.reshape(output, [n_samples, SEQ_LEN, self.dim_hidden])
         for i in range(5):
             output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
         output = self.list_Conv1D[-1](output)
@@ -507,12 +504,14 @@ class Generator(tf.keras.Model):
 
 class Discriminator(tf.keras.Model):
 
-    def __init__(self, dim_hidden):
+    def __init__(self, dim_hidden, seq_len):
         super().__init__()
         self.dim_hidden = dim_hidden
+        self.seq_len = seq_len
+        self.embedding_layer = Dense(dim_hidden, use_bias=False)
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
                             for _ in range(10)]
-        self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
+        # self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
         self.final_layer = Dense(1, activation=None)
         # self.final_layer = Conv1D(dim_output=1, kernel_size=1)
 
@@ -521,8 +520,9 @@ class Discriminator(tf.keras.Model):
     def call(self, inputs):
         batch_size = inputs.shape[0]
         dim_input = inputs.shape[-1]
-        inputs = tf.image.random_crop(inputs, [batch_size, 50, dim_input])
-        output = self.input_layer(inputs)
+        inputs = tf.image.random_crop(inputs, [batch_size, self.seq_len, dim_input])
+        output = self.embedding_layer(inputs)
+        # output = self.input_layer(inputs)
         for i in range(5):
             output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
         output = tf.reshape(output, [batch_size, -1])
@@ -582,13 +582,13 @@ class PhoneDiscriminator(tf.keras.Model):
         dim_hidden = args.model.D.num_hidden
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
                             for _ in range(10)]
-        self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
+        self.embedding_layer = Dense(dim_hidden, use_bias=False)
         self.final_layer = Conv1D(dim_output=1, kernel_size=1)
 
         self.optimizer = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
 
     def call(self, inputs):
-        output = self.input_layer(inputs)
+        output = self.embedding_layer(inputs)
         for i in range(5):
             output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
         output = self.final_layer(output)
