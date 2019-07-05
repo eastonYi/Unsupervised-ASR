@@ -5,7 +5,7 @@ import numpy as np
 import logging
 import collections
 from tqdm import tqdm
-from random import shuffle,random
+from random import shuffle, random, randint
 import multiprocessing
 import tensorflow as tf
 
@@ -213,6 +213,21 @@ class TextDataSet(LMDataSet):
 
                     yield text_ids
 
+    def batch(self, size, length):
+        list_sample = []
+        for filename in self.list_files:
+            with open(filename) as f:
+                for line in f:
+                    line = line.strip().split()
+                    if len(line) > self.args.list_bucket_boundaries[-1]:
+                        continue
+                    sample = [self.token2idx[word] for word in line] + [0] * length
+
+                    list_sample.append(sample[:length])
+                    if len(list_sample) >= size:
+                        yield np.array(list_sample, dtype=np.int32)
+                        list_sample = []
+
 
 def load_dataset(max_length, max_n_examples, max_vocab_size=2048, data_dir=''):
     print("loading dataset...")
@@ -370,3 +385,14 @@ def memory_data_batch_dataset(memory_data,
                             shuffle_buffer_size=shuffle_buffer_size,
                             repeat=repeat)
     return dataset
+
+
+def get_batch(iterator, batch_size, length):
+    list_samples = []
+    for _ in range(batch_size):
+        sample = next(iterator)
+        sample += [0] * length
+
+        list_samples.append(sample[:length])
+        if len(list_samples) >= batch_size:
+            return np.array(list_samples, dtype=np.int32)

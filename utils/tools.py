@@ -336,7 +336,7 @@ def get_preds_ngram(preds, len_preds, n):
     return ngrams
 
 
-def gradient_penalty(f, real, fake):
+def gradient_penalty(D, real, fake, mask_real=None, mask_fake=None):
     def _interpolate(a, b):
         shape = [tf.shape(a)[0]] + [1] * (a.shape.ndims - 1)
         alpha = tf.random.uniform(shape=shape, minval=0., maxval=1.)
@@ -344,11 +344,18 @@ def gradient_penalty(f, real, fake):
         inter.set_shape(a.shape)
         return inter
 
-    min_len = min(real.shape[1], fake.shape[1])
-    x = _interpolate(real[:, :min_len, :], fake[:, :min_len, :])
+    if mask_real is not None:
+        min_len = min(real.shape[1], fake.shape[1])
+        x = _interpolate(real[:, :min_len, :], fake[:, :min_len, :])
+        mask = tf.logical_and(mask_real[:, :min_len], mask_fake[:, :min_len])
+    else:
+        assert real.shape == fake.shape
+        x = _interpolate(real, fake)
+        mask = None
+
     with tf.GradientTape() as t:
         t.watch(x)
-        pred = f(x)
+        pred = D(x, mask)
     grad = t.gradient(pred, x)
     norm = tf.norm(tf.reshape(grad, [tf.shape(grad)[0], -1]), axis=1)
     gp = tf.reduce_mean((norm - 1.)**2)

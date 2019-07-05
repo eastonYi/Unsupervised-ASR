@@ -1,5 +1,6 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input
+# import tensorflow_addons as tfa
+from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input, MaxPooling2D
 from utils.tools import sampleFrames
 
 
@@ -466,14 +467,40 @@ def Conv1D(dim_output, kernel_size):
     return conv_op
 
 
-def ResBlock(inputs, list_Conv1D):
+def ResBlock(inputs, list_Conv1D, list_norms):
     output = inputs
-    output = tf.nn.relu(output)
+
     output = list_Conv1D[0](output)
+    output = list_norms[0](output)
     output = tf.nn.relu(output)
+    # output = tf.keras.layers.LeakyReLU(alpha=0.2)(output)
     output = list_Conv1D[1](output)
+    output = list_norms[1](output)
+    output = tf.nn.relu(output)
+    # output = tf.keras.layers.LeakyReLU(alpha=0.2)(output)
 
     return inputs + (0.3*output)
+
+
+def Inception(input, list_Conv1D):
+    """
+    """
+    tower_1 = list_Conv1D[0](input)
+    tower_1 = list_Conv1D[1](tower_1)
+
+    tower_2 = list_Conv1D[2](input)
+    tower_2 = list_Conv1D[3](tower_2)
+
+    tower_3 = list_Conv1D[4](input)
+    tower_3 = list_Conv1D[5](tower_3)
+
+    tower_4 = list_Conv1D[6](input)
+    tower_4 = list_Conv1D[7](tower_4)
+
+    # output = tf.keras.layers.concatenate([tower_1, tower_2, tower_3, tower_4], axis=1)
+    output = tf.reduce_mean([tower_1, tower_2, tower_3, tower_4], axis=0)
+
+    return output
 
 
 class Generator(tf.keras.Model):
@@ -486,6 +513,7 @@ class Generator(tf.keras.Model):
         self.input_layer = Dense(dim_hidden*seq_len, activation=None)
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
                             for _ in range(10)]
+        self.list_norms = [tf.keras.layers.BatchNormalization() for _ in range(10)]
         self.list_Conv1D.append(Conv1D(dim_output=dim_output, kernel_size=1))
 
         self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
@@ -495,7 +523,7 @@ class Generator(tf.keras.Model):
         output = self.input_layer(output)
         output = tf.reshape(output, [n_samples, SEQ_LEN, self.dim_hidden])
         for i in range(5):
-            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
         output = self.list_Conv1D[-1](output)
         output = tf.nn.softmax(output)
 
@@ -511,6 +539,7 @@ class Discriminator(tf.keras.Model):
         self.embedding_layer = Dense(dim_hidden, use_bias=False)
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
                             for _ in range(10)]
+        self.list_norms = [tf.keras.layers.BatchNormalization() for _ in range(10)]
         # self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
         self.final_layer = Dense(1, activation=None)
         # self.final_layer = Conv1D(dim_output=1, kernel_size=1)
@@ -524,7 +553,7 @@ class Discriminator(tf.keras.Model):
         output = self.embedding_layer(inputs)
         # output = self.input_layer(inputs)
         for i in range(5):
-            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
         output = tf.reshape(output, [batch_size, -1])
         output = self.final_layer(output)
         # output = tf.reduce_mean(output[:, :, 0], -1)
@@ -541,6 +570,7 @@ class PhoneClassifier(tf.keras.Model):
         self.list_layers.append(Dense(args.dim_output, activation='softmax'))
 
         self.optimizer = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
+        # self.optimizer = tf.keras.optimizers.RMSprop(args.opti.G.lr)
 
     def call(self, x, aligns=None):
         output = x
@@ -580,18 +610,23 @@ class PhoneDiscriminator(tf.keras.Model):
     def __init__(self, args):
         super().__init__()
         dim_hidden = args.model.D.num_hidden
+        self.num_blocks = args.model.D.num_blocks
         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
-                            for _ in range(10)]
+                            for _ in range(args.model.D.num_blocks*2)]
+        self.list_norms = [tf.keras.layers.BatchNormalization()
+                           for _ in range(args.model.D.num_blocks*2)]
         self.embedding_layer = Dense(dim_hidden, use_bias=False)
         self.final_layer = Conv1D(dim_output=1, kernel_size=1)
 
         self.optimizer = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
 
-    def call(self, inputs):
+    def call(self, inputs, pad_mask):
+        pad_mask = tf.cast(pad_mask, tf.float32)
         output = self.embedding_layer(inputs)
-        for i in range(5):
-            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2])
-        output = self.final_layer(output)
-        output = tf.reduce_mean(output[:, :, 0], -1)
+        for i in range(self.num_blocks):
+            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
+        output = self.final_layer(output)[:, :, 0]
+        output *= pad_mask
+        output = tf.reduce_sum(output, -1) / tf.reduce_sum(pad_mask, -1)
 
         return output
