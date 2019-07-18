@@ -5,17 +5,17 @@ from time import time
 import os
 import tensorflow as tf
 import numpy as np
-from random import sample
 
 from eastonCode.tfTools.tfData import TFData
 
 from utils.arguments import args
-from utils.dataset import ASR_align_DataSet, TextDataSet, get_batch
-from utils.tools import build_optimizer, warmup_exponential_decay, sampleFrames, batch_cer, gradient_penalty, frames_constrain_loss
+from utils.dataset import ASR_align_DataSet, TextDataSet
+from utils.tools import batch_cer, gradient_penalty, frames_constrain_loss, aligns2indices, align_accuracy, get_predicts
 from utils.model import PhoneClassifier, PhoneDiscriminator
 
 
 ITERS = 200000 # How many iterations to train for
+tf.random.set_seed(2)
 
 def train(Model):
     dataset_dev = ASR_align_DataSet(
@@ -34,65 +34,72 @@ def train(Model):
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read(_shuffle=False)
 
-        transformation_func = tf.data.experimental.bucket_by_sequence_length(
-            element_length_func=lambda x,*y: tf.shape(x)[0],
-            bucket_boundaries=args.list_bucket_boundaries,
-            bucket_batch_sizes=args.list_batch_size,
-            padded_shapes=([None, args.dim_input], [None], [None]))
-        iter_train = iter(tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=5))
-        # iter_train = iter(tfdata_train.cache().repeat().shuffle(500).apply(transformation_func).prefetch(buffer_size=5))
+        iter_train = iter(tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
+                ([None, args.dim_input], [None], [None])).prefetch(buffer_size=5))
         tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
-        # iter_train = iter(tfdata_train.cache().repeat().shuffle(500).apply(transformation_func).prefetch(buffer_size=5))
 
         # text data
         dataset_text = TextDataSet(
             list_files=[args.dirs.lm.data],
             args=args,
             _shuffle=True)
-        # iter_text = iter(dataset_text)
 
         tfdata_train = tf.data.Dataset.from_generator(
             dataset_text, (tf.int32), (tf.TensorShape([None])))
-        iter_text = iter(tfdata_train.cache().\
-            repeat().shuffle(10000).padded_batch(args.batch_size, ([None])).prefetch(buffer_size=5))
+        iter_text = iter(tfdata_train.cache().repeat().shuffle(100).padded_batch(args.batch_size,
+            ([None])).prefetch(buffer_size=5))
 
     # create model paremeters
     G = PhoneClassifier(args)
     D = PhoneDiscriminator(args)
+    G.summary()
+    D.summary()
+    optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
+    optimizer_D = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
+
+    writer = tf.summary.create_file_writer(str(args.dir_log))
+    ckpt = tf.train.Checkpoint(G=G, optimizer_G = optimizer_G)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=5)
+
+    # if a checkpoint exists, restore the latest checkpoint.
+    if args.dirs.checkpoint:
+        _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+        ckpt.restore(_ckpt_manager.latest_checkpoint)
+        print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
 
     start_time = datetime.now()
 
     for iteration in range(ITERS):
-
-        if iteration == 1:
-            G.summary()
-            D.summary()
 
         start = time()
 
         for _ in range(args.opti.D_G_rate):
             x, _, aligns = next(iter_train)
             text = next(iter_text)
-            # text = get_batch(iter_text, aligns.shape[0], aligns.shape[1])
-
             P_Real = tf.one_hot(text, args.dim_output)
-            s2 = time()
-            cost_D, gp = train_D(x, aligns, P_Real, text>0, G, D, D.trainable_variables, args.lambda_gp)
-            # print('train_D: ', time()-s2)
+            cost_D, gp = train_D(x, aligns, P_Real, text>0, G, D, optimizer_D, args.lambda_gp)
 
         x, _, aligns = next(iter_train)
-        s3 = time()
-        cost_G, fs = train_G(x, aligns, G, D, G.trainable_variables, args.lambda_fs)
-        # print('train_G: ', time()-s3)
+        cost_G, fs = train_G(x, aligns, G, D, optimizer_G, args.lambda_fs)
 
         if iteration % 10 == 0:
             print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tbatch: {}\tused: {:.3f}\titer: {}'.format(
                    cost_G, fs, cost_D, gp, x.shape, time()-start, iteration))
+            with writer.as_default():
+                tf.summary.scalar("costs/cost_G", cost_G, step=iteration)
+                tf.summary.scalar("costs/cost_D", cost_D, step=iteration)
+                tf.summary.scalar("costs/gp", gp, step=iteration)
+                tf.summary.scalar("costs/fs", fs, step=iteration)
         if iteration % args.dev_step == 0:
-            evaluation(tfdata_dev, G)
+            fer, cer = evaluation(tfdata_dev, G)
+            with writer.as_default():
+                tf.summary.scalar("performance/fer", fer, step=iteration)
+                tf.summary.scalar("performance/cer", cer, step=iteration)
         if iteration % args.decode_step == 0:
             decode(dataset_dev, G)
-
+        if iteration % args.save_step == 0:
+            save_path = ckpt_manager.save()
+            print('save model {}'.format(save_path))
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
@@ -107,10 +114,10 @@ def evaluation(tfdata_dev, model):
     total_cer_len = 0
     for batch in tfdata_dev:
         x, y, aligns = batch
-        P_output = model(x)
-        acc = model.align_accuracy(P_output, y)
+        logits = model(x)
+        acc = align_accuracy(logits, y)
         list_acc.append(acc)
-        preds = model.get_predicts(P_output)
+        preds = get_predicts(logits)
         batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), y)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
@@ -118,49 +125,60 @@ def evaluation(tfdata_dev, model):
         progress = num_processed / args.data.dev_size
 
     cer = total_cer_dist/total_cer_len
+    fer = 1-np.mean(list_acc)
     print('dev FER: {:.3f}\t dev PER: {:.3f}\t {:.2f}min {} / {}'.format(
            1-np.mean(list_acc), cer, (time()-start_time)/60, num_processed, args.data.dev_size))
+
+    return fer, cer
 
 
 def decode(dataset, model):
     sample = dataset[0]
     x = np.array([sample['feature']], dtype=np.float32)
-    P_output = model(x)
-    predits = model.get_predicts(P_output)
+    logits = model(x)
+    predits = get_predicts(logits)
     print('predits: \n', predits.numpy()[0])
     print('label: \n', sample['label'])
     print('align: ', sample['align'])
 
 
-def train_G(x, aligns, G, D, params_G, lambda_fs):
+def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
+    indices = aligns2indices(aligns)
+    params_G = G.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_G:
         tape_G.watch(params_G)
-        _P_G, P_G = G(x, aligns)
-        disc_fake = D(_P_G, aligns>0)
+        logits = G(x)
+        P_G = tf.nn.softmax(logits)
+        _P_G = tf.gather_nd(P_G, indices)
+        disc_fake = D([_P_G, aligns>0])
 
         gen_cost = -tf.reduce_mean(disc_fake)
-        fs = frames_constrain_loss(P_G, aligns)
+        fs = frames_constrain_loss(logits, aligns)
         gen_cost += lambda_fs * fs
 
     gradients_G = tape_G.gradient(gen_cost, params_G)
-    G.optimizer.apply_gradients(zip(gradients_G, params_G))
+    optimizer_G.apply_gradients(zip(gradients_G, params_G))
 
     return gen_cost, fs
 
 
-def train_D(x, aligns, P_Real, mask_real, G, D, params_D, lambda_gp):
+def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
+    indices = aligns2indices(aligns)
+    params_D = D.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_D:
         tape_D.watch(params_D)
-        _P_G, P_G = G(x, aligns)
-        disc_real = D(P_Real, mask_real) # to be +inf
-        disc_fake = D(_P_G, aligns>0) # to be -inf
+        logits= G(x)
+        P_G = tf.nn.softmax(logits)
+        _P_G = tf.gather_nd(P_G, indices)
+        disc_real = D([P_Real, mask_real]) # to be +inf
+        disc_fake = D([_P_G, aligns>0]) # to be -inf
 
         disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
         gp = gradient_penalty(D, P_Real, _P_G, mask_real=mask_real, mask_fake=aligns>0)
         disc_cost += lambda_gp * gp
 
     gradients_D = tape_D.gradient(disc_cost, params_D)
-    D.optimizer.apply_gradients(zip(gradients_D, params_D))
+    optimizer_D.apply_gradients(zip(gradients_D, params_D))
 
     return disc_cost, gp
 

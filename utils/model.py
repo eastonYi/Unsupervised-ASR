@@ -1,7 +1,6 @@
 import tensorflow as tf
 # import tensorflow_addons as tfa
 from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input, MaxPooling2D
-from utils.tools import sampleFrames
 
 
 class FC_Model(tf.keras.models.Sequential):
@@ -482,27 +481,6 @@ def ResBlock(inputs, list_Conv1D, list_norms):
     return inputs + (0.3*output)
 
 
-def Inception(input, list_Conv1D):
-    """
-    """
-    tower_1 = list_Conv1D[0](input)
-    tower_1 = list_Conv1D[1](tower_1)
-
-    tower_2 = list_Conv1D[2](input)
-    tower_2 = list_Conv1D[3](tower_2)
-
-    tower_3 = list_Conv1D[4](input)
-    tower_3 = list_Conv1D[5](tower_3)
-
-    tower_4 = list_Conv1D[6](input)
-    tower_4 = list_Conv1D[7](tower_4)
-
-    # output = tf.keras.layers.concatenate([tower_1, tower_2, tower_3, tower_4], axis=1)
-    output = tf.reduce_mean([tower_1, tower_2, tower_3, tower_4], axis=0)
-
-    return output
-
-
 class Generator(tf.keras.Model):
 
     def __init__(self, dim_hidden, seq_len, dim_output):
@@ -561,72 +539,63 @@ class Discriminator(tf.keras.Model):
         return output
 
 
-class PhoneClassifier(tf.keras.Model):
+def PhoneClassifier(args):
+    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+                                        name='generator_input_x')
+    if args.model.G.structure == 'fc':
+        for _ in range(args.model.G.num_layers):
+            x = Dense(args.model.G.num_hidden, activation='relu')(x)
+    elif args.model.G.structure == 'lstm':
+        for _ in range(args.model.G.num_layers):
+            x = LSTM(args.model.G.num_hidden,
+                     return_sequences=True,
+                     dropout=args.model.G.dropout)(x)
+    elif args.model.G.structure == 'blstm':
+        for _ in range(args.model.G.num_layers):
+            x = Bidirectional(LSTM(args.model.G.num_hidden,
+                                   return_sequences=True,
+                                   dropout=args.model.G.dropout))(x)
 
-    def __init__(self, args):
-        super().__init__()
-        self.list_layers = [Dense(args.model.G.num_hidden, activation='relu')
-                            for _ in range(args.model.G.num_layers)]
-        self.list_layers.append(Dense(args.dim_output, activation='softmax'))
+    logits = Dense(args.dim_output, activation='linear')(x)
 
-        self.optimizer = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
-        # self.optimizer = tf.keras.optimizers.RMSprop(args.opti.G.lr)
+    model = tf.keras.Model(inputs=input_x,
+                           outputs=logits,
+                           name='sequence_generator')
 
-    def call(self, x, aligns=None):
-        output = x
-        for layer in self.list_layers:
-            output = layer(output)
-        P_G = output
-
-        if aligns is not None:
-            _aligns = sampleFrames(aligns)
-            batch, len_label_max = _aligns.shape
-            batch_idx = tf.tile(tf.range(batch)[:, None], [1, len_label_max])
-            indices = tf.stack([batch_idx, _aligns], -1)
-            _P_G = tf.gather_nd(P_G, indices)
-
-            return _P_G, P_G
-        else:
-            return P_G
-
-    def align_accuracy(self, P_output, labels):
-        mask = tf.cast(labels > 0, dtype=tf.float32)
-
-        predicts = tf.argmax(P_output, axis=-1, output_type=tf.int32)
-        results = tf.cast(tf.equal(predicts, labels), tf.float32)
-
-        results *= mask
-        acc = tf.reduce_sum(results) / tf.reduce_sum(mask)
-
-        return acc
-
-    def get_predicts(self, P_output):
-
-        return tf.argmax(P_output, axis=-1, output_type=tf.int32)
+    return model
 
 
-class PhoneDiscriminator(tf.keras.Model):
+def PhoneDiscriminator(args):
+    dim_hidden = args.model.D.num_hidden
 
-    def __init__(self, args):
-        super().__init__()
-        dim_hidden = args.model.D.num_hidden
-        self.num_blocks = args.model.D.num_blocks
-        self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
-                            for _ in range(args.model.D.num_blocks*2)]
-        self.list_norms = [tf.keras.layers.BatchNormalization()
-                           for _ in range(args.model.D.num_blocks*2)]
-        self.embedding_layer = Dense(dim_hidden, use_bias=False)
-        self.final_layer = Conv1D(dim_output=1, kernel_size=1)
+    x = input = tf.keras.layers.Input(shape=[args.max_seq_len, args.dim_output],
+                                      name='discriminator_input_x')
 
-        self.optimizer = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
+    pad_mask = input_mask = tf.keras.layers.Input(shape=[args.max_seq_len],
+                                                  name='discriminator_input_mask',
+                                                  dtype=tf.bool)
+    pad_mask = tf.cast(pad_mask, tf.float32)
 
-    def call(self, inputs, pad_mask):
-        pad_mask = tf.cast(pad_mask, tf.float32)
-        output = self.embedding_layer(inputs)
-        for i in range(self.num_blocks):
-            output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
-        output = self.final_layer(output)[:, :, 0]
-        output *= pad_mask
-        output = tf.reduce_sum(output, -1) / tf.reduce_sum(pad_mask, -1)
+    x = Dense(dim_hidden, use_bias=False)(x)
 
-        return output
+    for i in range(args.model.D.num_blocks):
+        inputs = x
+        x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        x = inputs + (0.3*x)
+
+    x = Conv1D(dim_output=1, kernel_size=1)(x)[:, :, 0]
+
+    x *= pad_mask
+    output = tf.reduce_sum(x, -1) / tf.reduce_sum(pad_mask, -1)
+
+    model = tf.keras.Model(inputs=[input, input_mask],
+                           outputs=output,
+                           name='sequence_discriminator')
+
+    return model

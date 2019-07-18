@@ -355,7 +355,7 @@ def gradient_penalty(D, real, fake, mask_real=None, mask_fake=None):
 
     with tf.GradientTape() as t:
         t.watch(x)
-        pred = D(x, mask)
+        pred = D([x, mask])
     grad = t.gradient(pred, x)
     norm = tf.norm(tf.reshape(grad, [tf.shape(grad)[0], -1]), axis=1)
     gp = tf.reduce_mean((norm - 1.)**2)
@@ -379,3 +379,37 @@ def frames_constrain_loss(logits, align):
         _frame = frame
 
     return tf.reduce_sum(loss)
+
+
+def aligns2indices(aligns, sample=True):
+    """
+    aligns:
+    return please ignore the value in sample where in aligns is 0
+    """
+    if sample:
+        aligns = tf.cast(aligns, tf.float32)
+        _aligns = tf.pad(aligns, [[0, 0], [1, 0]])[:, :-1]
+        sampled_aligns = tf.cast((_aligns + (aligns-_aligns)*
+            tf.random.uniform(aligns.shape))*tf.cast(aligns > 0, tf.float32), tf.int32)
+    else:
+        sampled_aligns = aligns
+    batch_idx = tf.tile(tf.range(aligns.shape[0])[:, None], [1, aligns.shape[1]])
+    indices = tf.stack([batch_idx, sampled_aligns], -1)
+
+    return indices
+
+
+def align_accuracy(P_output, labels):
+    mask = tf.cast(labels > 0, dtype=tf.float32)
+
+    predicts = tf.argmax(P_output, axis=-1, output_type=tf.int32)
+    results = tf.cast(tf.equal(predicts, labels), tf.float32)
+
+    results *= mask
+    acc = tf.reduce_sum(results) / tf.reduce_sum(mask)
+
+    return acc
+
+def get_predicts(P_output):
+
+    return tf.argmax(P_output, axis=-1, output_type=tf.int32)
