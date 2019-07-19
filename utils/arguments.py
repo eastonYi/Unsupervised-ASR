@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(levelname)s
 from .dataProcess import load_vocab
 from eastonCode.tfTools.tfData import TFData
 
+
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

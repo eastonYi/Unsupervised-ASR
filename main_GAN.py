@@ -15,7 +15,7 @@ from utils.model import PhoneClassifier, PhoneDiscriminator
 
 
 ITERS = 200000 # How many iterations to train for
-tf.random.set_seed(2)
+tf.random.set_seed(args.seed)
 
 def train(Model):
     dataset_dev = ASR_align_DataSet(
@@ -196,6 +196,18 @@ if __name__ == '__main__':
 
     print('CUDA_VISIBLE_DEVICES: ', param.gpu)
 
+    if param.name:
+        args.dir_model = args.dir_model /  param.name
+        args.dir_log = args.dir_model / 'log'
+        args.dir_checkpoint = args.dir_model / 'checkpoint'
+        if args.dir_model.is_dir():
+            os.system('rm -r '+ args.dir_model.name)
+        args.dir_model.mkdir()
+        args.dir_log.mkdir()
+        args.dir_checkpoint.mkdir()
+        with open(args.dir_model / 'configs.txt', 'w') as fw:
+            print(args, file=fw)
+
     if param.mode == 'train':
         os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
         gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -203,6 +215,6 @@ if __name__ == '__main__':
         [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
         print('enter the TRAINING phrase')
         train(args.Model)
-        # lm_assistant(Model, Model_LM)
+
 
         # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml

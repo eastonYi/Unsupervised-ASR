@@ -1,21 +1,19 @@
 dirs:
     train:
-        data: /data/sxu/easton/data/TIMIT/train_phone39.csv
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_13_5_2_3
+        data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
+        # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
     dev:
-        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/dev_13_5_2_3
+        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
     test:
-        data: /data/sxu/easton/data/TIMIT/test_phone39.csv
+        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
     lm:
-        data: /data/sxu/easton/data/TIMIT/train_phone.txt
+        data: /data/sxu/easton/data/AISHELL/train_phone.txt
     type: csv
-    vocab: /data/sxu/easton/data/TIMIT/phone39.list
-    # restore: /data/sxu/easton/projects/EODM/models/timit_conv/checkpoint
-    # lm_config: /data/sxu/easton/projects/EODM/configs/timit_lm.yaml
-
+    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
 data:
-    featType: fbank
+    featType: mfcc
     dim_raw_input: 13
     num_context: 5
     downsample: 2
@@ -50,6 +48,7 @@ num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
+seed: 3
 
 lambda_fs: 0.001
 lambda_gp: 10.0
