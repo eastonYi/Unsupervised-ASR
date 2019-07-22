@@ -15,7 +15,7 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
         self.warmup_steps = warmup_steps*1.0
         self.peak = peak*1.0
         self.decay_steps = decay_steps*1.0
-        
+
     def __call__(self, step):
         warmup_steps, peak, decay_steps = self.warmup_steps, self.peak, self.decay_steps
         # warmup_steps = tf.to_float(warmup_steps)
@@ -419,3 +419,25 @@ def compute_ppl(logits, labels):
     token_sum = tf.reduce_sum(mask)
 
     return loss_sum, token_sum
+
+
+def CE_loss(logits, labels, vocab_size, confidence=0.9):
+    mask = tf.cast(labels > 0, dtype=tf.float32)
+
+    low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)
+    normalizing = -(confidence*tf.math.log(confidence) +
+        tf.cast(vocab_size-1, tf.float32) * low_confidence * tf.math.log(low_confidence + 1e-20))
+    soft_targets = tf.one_hot(
+        tf.cast(labels, tf.int32),
+        depth=vocab_size,
+        on_value=confidence,
+        off_value=low_confidence)
+
+    xentropy = tf.nn.softmax_cross_entropy_with_logits(
+        logits=logits, labels=soft_targets)
+    loss = xentropy - normalizing
+
+    loss *= mask
+    loss = tf.reduce_sum(loss) / tf.reduce_sum(mask)
+
+    return loss

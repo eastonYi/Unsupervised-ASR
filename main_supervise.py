@@ -12,7 +12,7 @@ from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
 from utils.tools import batch_cer, gradient_penalty, frames_constrain_loss, aligns2indices, align_accuracy, get_predicts, CE_loss
 
-from models.GAN import PhoneClassifier, PhoneDiscriminator
+from models.GAN import PhoneClassifier
 
 
 ITERS = 200000 # How many iterations to train for
@@ -52,12 +52,8 @@ def train(Model):
 
     # create model paremeters
     G = PhoneClassifier(args)
-    D = PhoneDiscriminator(args)
-    # import pdb; pdb.set_trace()
     G.summary()
-    D.summary()
     optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
-    optimizer_D = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
     ckpt = tf.train.Checkpoint(G=G, optimizer_G = optimizer_G)
@@ -69,33 +65,18 @@ def train(Model):
         ckpt.restore(_ckpt_manager.latest_checkpoint)
         print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
 
-    x_0, y_0, aligns_0 = next(iter_train)
-
     start_time = datetime.now()
 
     for iteration in range(ITERS):
-
         start = time()
 
-        for _ in range(args.opti.D_G_rate):
-            x, _, aligns = next(iter_train)
-            text = next(iter_text)
-            P_Real = tf.one_hot(text, args.dim_output)
-            cost_D, gp = train_D(x, aligns, P_Real, text>0, G, D, optimizer_D, args.lambda_gp)
-
-        x, _, aligns = next(iter_train)
-        cost_G, fs = train_G(x, aligns, G, D, optimizer_G, args.lambda_fs)
-
-        loss_supervise = train_G_supervised(x_0, y_0, G, optimizer_G, args.dim_output)
+        x, y, aligns = next(iter_train)
+        loss_supervise = train_G_supervised(x, y, G, optimizer_G, args.dim_output)
 
         if iteration % 10 == 0:
-            print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tloss_supervise: {:.3f}\tbatch: {}|{}\tused: {:.3f}\titer: {}'.format(
-                   cost_G, fs, cost_D, gp, loss_supervise, x.shape, text.shape, time()-start, iteration))
+            print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\titer: {}'.format(
+                   loss_supervise, x.shape, time()-start, iteration))
             with writer.as_default():
-                tf.summary.scalar("costs/cost_G", cost_G, step=iteration)
-                tf.summary.scalar("costs/cost_D", cost_D, step=iteration)
-                tf.summary.scalar("costs/gp", gp, step=iteration)
-                tf.summary.scalar("costs/fs", fs, step=iteration)
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=iteration)
         if iteration % args.dev_step == 0:
             fer, cer = evaluation(tfdata_dev, G)
@@ -147,49 +128,6 @@ def decode(dataset, model):
     print('predits: \n', predits.numpy()[0])
     print('label: \n', sample['label'])
     print('align: ', sample['align'])
-
-
-def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
-    indices = aligns2indices(aligns)
-    params_G = G.trainable_variables
-    with tf.GradientTape(watch_accessed_variables=False) as tape_G:
-        tape_G.watch(params_G)
-        logits = G(x, training=True)
-        P_G = tf.nn.softmax(logits)
-        _P_G = tf.gather_nd(P_G, indices)
-        disc_fake = D([_P_G, aligns>0], training=True)
-
-        gen_cost = -tf.reduce_mean(disc_fake)
-        # gen_cost = tf.reduce_mean(tf.math.squared_difference(disc_fake, 1))
-        fs = frames_constrain_loss(logits, aligns)
-        gen_cost += lambda_fs * fs
-
-    gradients_G = tape_G.gradient(gen_cost, params_G)
-    optimizer_G.apply_gradients(zip(gradients_G, params_G))
-
-    return gen_cost, fs
-
-
-def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
-    indices = aligns2indices(aligns)
-    params_D = D.trainable_variables
-    with tf.GradientTape(watch_accessed_variables=False) as tape_D:
-        tape_D.watch(params_D)
-        logits= G(x, training=True)
-        P_G = tf.nn.softmax(logits)
-        _P_G = tf.gather_nd(P_G, indices)
-        disc_real = D([P_Real, mask_real], training=True) # to be +inf
-        disc_fake = D([_P_G, aligns>0], training=True) # to be -inf
-
-        disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-        # disc_cost = tf.reduce_mean(disc_fake**2) + tf.reduce_mean(tf.math.squared_difference(disc_real, 1))
-        gp = gradient_penalty(D, P_Real, _P_G, mask_real=mask_real, mask_fake=aligns>0)
-        disc_cost += lambda_gp * gp
-
-    gradients_D = tape_D.gradient(disc_cost, params_D)
-    optimizer_D.apply_gradients(zip(gradients_D, params_D))
-
-    return disc_cost, gp
 
 
 @tf.function

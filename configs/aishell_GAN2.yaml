@@ -12,6 +12,8 @@ dirs:
         data: /data/sxu/easton/data/AISHELL/train_phone.txt
     type: csv
     vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    checkpoint: /data/sxu/easton/projects/EODM/exps/aishell_GAN2/checkpoint
+
 data:
     featType: mfcc
     dim_raw_input: 13
@@ -24,7 +26,7 @@ model:
     G:
         structure: fc
         num_hidden: 512
-        num_layers: 2
+        num_layers: 1
     D:
         num_hidden: 512
         num_blocks: 5
@@ -48,7 +50,8 @@ num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
-seed: 8
+max_seq_len: 300
+seed: 0
 
-lambda_fs: 0.00005
+lambda_fs: 0.001
 lambda_gp: 10.0
