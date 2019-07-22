@@ -2,10 +2,10 @@ dirs:
     train:
         data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
         # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_13_5_1_1
     dev:
         data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k_13_5_1_1
     test:
         data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
     lm:
@@ -16,7 +16,7 @@ data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 2
+    downsample: 1
     add_delta: True
     unit: phone
 

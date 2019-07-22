@@ -3,55 +3,50 @@ from datetime import datetime
 from time import time
 import os
 import tensorflow as tf
-# tf.debugging.set_log_device_placement(True)
-tf.config.gpu.set_per_process_memory_growth(True)
 import numpy as np
 
 from utils.arguments import args
 # from utils.dataset import PTB_LMDataSet as LMDataSet
-from utils.dataset import LMDataSet
-from utils.tools import build_optimizer, warmup_exponential_decay
+from utils.dataset import LMDataSet, TextDataSet
+from utils.tools import build_optimizer, warmup_exponential_decay, compute_ppl
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 def train(Model):
     # create dataset and dataloader
-    dataset_train = LMDataSet(
+    dataset_train = TextDataSet(
         list_files=[args.dirs.train.data],
         args=args,
         _shuffle=True)
-    dataset_dev = LMDataSet(
+    dataset_dev = TextDataSet(
         list_files=[args.dirs.dev.data],
         args=args,
         _shuffle=False)
 
+    args.data.train_size = len(dataset_train)
+    args.data.dev_size = len(dataset_dev)
+
     tfdata_train = tf.data.Dataset.from_generator(
-        dataset_train, (tf.int32, tf.int32), (tf.TensorShape([None]), tf.TensorShape([None])))
+        dataset_train, (tf.int32), (tf.TensorShape([None])))
     tfdata_dev = tf.data.Dataset.from_generator(
-        dataset_dev, (tf.int32, tf.int32), (tf.TensorShape([None]), tf.TensorShape([None])))
+        dataset_dev, (tf.int32), (tf.TensorShape([None])))
 
-    # transformation_func = tf.data.experimental.bucket_by_sequence_length(
-    #     element_length_func=lambda x,*y: tf.shape(x)[0],
-    #     bucket_boundaries=args.list_bucket_boundaries,
-    #     bucket_batch_sizes=args.list_batch_size,
-    #     padded_shapes=([None, args.dim_input], [None], [None]))
-
-    # tfdata_train = tfdata_train.repeat().shuffle(500).apply(transformation_func).prefetch(buffer_size=5)
-    tfdata_train = tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size, ([None], [None])).prefetch(buffer_size=5)
-    tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None], [None]))
-
-    # for i in tfdata_train:
-    #     print(i)
-    #     import pdb; pdb.set_trace()
+    tfdata_train = tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size, ([None])).prefetch(buffer_size=5)
+    tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None]))
 
     # build optimizer
     warmup = warmup_exponential_decay(
         warmup_steps=args.opti.warmup_steps,
         peak=args.opti.peak,
         decay_steps=args.opti.decay_steps)
-    optimizer = build_optimizer(warmup, args.opti.type)
+    optimizer = tf.keras.optimizers.Adam(
+        warmup,
+        beta_1=0.9,
+        beta_2=0.98,
+        epsilon=1e-9)
 
     # create model paremeters
-    model = Model(args, optimizer=optimizer, name='lstm')
+    model = Model(args)
     model.summary()
 
     # save & reload
@@ -71,13 +66,7 @@ def train(Model):
         x, y = batch
 
         run_model_time = time()
-        # build compute model on-the-fly
-        with tf.GradientTape() as tape:
-            logits = model(x, training=True)
-            loss = model.compute_loss(logits, y)
-
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        loss = train_step(x, y, model, optimizer)
 
         num_processed += len(x)
         get_data_time = run_model_time - get_data_time
@@ -99,6 +88,21 @@ def train(Model):
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
 
+# @tf.function
+def train_step(x, labels, model, optimizer):
+    with tf.GradientTape() as tape:
+        logits = model(x, training=True)
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits)
+        mask = tf.cast(labels > 0, dtype=tf.float32)
+        loss *= mask
+        loss = tf.reduce_sum(loss) / tf.reduce_sum(mask)
+
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+    return loss
+
+
 def evaluation(tfdata_dev, model):
     start_time = time()
     num_processed = 0
@@ -108,7 +112,7 @@ def evaluation(tfdata_dev, model):
     for batch in tfdata_dev:
         x, y = batch
         logits = model(x, training=False)
-        loss, num_batch_tokens = model.compute_ppl(logits, y)
+        loss, num_batch_tokens = compute_ppl(logits, y)
         loss_sum += loss
         num_tokens += num_batch_tokens
         num_processed += len(x)
@@ -145,13 +149,14 @@ if __name__ == '__main__':
 
     param = parser.parse_args()
 
-    print('CUDA_VISIBLE_DEVICES: ', args.gpus)
 
-    if args.model.structure == 'lstm':
-        from utils.model import Embed_LSTM_Model as Model
+    from models.LSTM import Embed_LSTM_Model as Model
 
     if param.mode == 'train':
         os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        assert len(gpus) > 0, "Not enough GPU hardware devices available"
+        [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
         print('enter the TRAINING phrase')
         train(Model)
 

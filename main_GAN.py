@@ -11,7 +11,8 @@ from eastonCode.tfTools.tfData import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
 from utils.tools import batch_cer, gradient_penalty, frames_constrain_loss, aligns2indices, align_accuracy, get_predicts
-from utils.model import PhoneClassifier, PhoneDiscriminator
+
+from models.GAN import PhoneClassifier, PhoneDiscriminator
 
 
 ITERS = 200000 # How many iterations to train for
@@ -52,6 +53,7 @@ def train(Model):
     # create model paremeters
     G = PhoneClassifier(args)
     D = PhoneDiscriminator(args)
+    # import pdb; pdb.set_trace()
     G.summary()
     D.summary()
     optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
@@ -83,8 +85,8 @@ def train(Model):
         cost_G, fs = train_G(x, aligns, G, D, optimizer_G, args.lambda_fs)
 
         if iteration % 10 == 0:
-            print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tbatch: {}\tused: {:.3f}\titer: {}'.format(
-                   cost_G, fs, cost_D, gp, x.shape, time()-start, iteration))
+            print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tbatch: {}|{}\tused: {:.3f}\titer: {}'.format(
+                   cost_G, fs, cost_D, gp, x.shape, text.shape, time()-start, iteration))
             with writer.as_default():
                 tf.summary.scalar("costs/cost_G", cost_G, step=iteration)
                 tf.summary.scalar("costs/cost_D", cost_D, step=iteration)
@@ -127,7 +129,7 @@ def evaluation(tfdata_dev, model):
     cer = total_cer_dist/total_cer_len
     fer = 1-np.mean(list_acc)
     print('dev FER: {:.3f}\t dev PER: {:.3f}\t {:.2f}min {} / {}'.format(
-           1-np.mean(list_acc), cer, (time()-start_time)/60, num_processed, args.data.dev_size))
+           fer, cer, (time()-start_time)/60, num_processed, args.data.dev_size))
 
     return fer, cer
 
@@ -147,12 +149,13 @@ def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
     params_G = G.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_G:
         tape_G.watch(params_G)
-        logits = G(x)
+        logits = G(x, training=True)
         P_G = tf.nn.softmax(logits)
         _P_G = tf.gather_nd(P_G, indices)
-        disc_fake = D([_P_G, aligns>0])
+        disc_fake = D([_P_G, aligns>0], training=True)
 
         gen_cost = -tf.reduce_mean(disc_fake)
+        # gen_cost = tf.reduce_mean(tf.math.squared_difference(disc_fake, 1))
         fs = frames_constrain_loss(logits, aligns)
         gen_cost += lambda_fs * fs
 
@@ -167,13 +170,14 @@ def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
     params_D = D.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_D:
         tape_D.watch(params_D)
-        logits= G(x)
+        logits= G(x, training=True)
         P_G = tf.nn.softmax(logits)
         _P_G = tf.gather_nd(P_G, indices)
-        disc_real = D([P_Real, mask_real]) # to be +inf
-        disc_fake = D([_P_G, aligns>0]) # to be -inf
+        disc_real = D([P_Real, mask_real], training=True) # to be +inf
+        disc_fake = D([_P_G, aligns>0], training=True) # to be -inf
 
         disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+        # disc_cost = tf.reduce_mean(disc_fake**2) + tf.reduce_mean(tf.math.squared_difference(disc_real, 1))
         gp = gradient_penalty(D, P_Real, _P_G, mask_real=mask_real, mask_fake=aligns>0)
         disc_cost += lambda_gp * gp
 
@@ -197,15 +201,15 @@ if __name__ == '__main__':
     print('CUDA_VISIBLE_DEVICES: ', param.gpu)
 
     if param.name:
-        args.dir_model = args.dir_model /  param.name
-        args.dir_log = args.dir_model / 'log'
-        args.dir_checkpoint = args.dir_model / 'checkpoint'
-        if args.dir_model.is_dir():
-            os.system('rm -r '+ args.dir_model.name)
-        args.dir_model.mkdir()
+        args.dir_exps = args.dir_exps /  param.name
+        args.dir_log = args.dir_exps / 'log'
+        args.dir_checkpoint = args.dir_exps / 'checkpoint'
+        if args.dir_exps.is_dir():
+            os.system('rm -r '+ str(args.dir_exps))
+        args.dir_exps.mkdir()
         args.dir_log.mkdir()
         args.dir_checkpoint.mkdir()
-        with open(args.dir_model / 'configs.txt', 'w') as fw:
+        with open(args.dir_exps / 'configs.txt', 'w') as fw:
             print(args, file=fw)
 
     if param.mode == 'train':

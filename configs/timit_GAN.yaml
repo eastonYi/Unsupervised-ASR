@@ -50,6 +50,7 @@ num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
+max_seq_len: 300
 seed: 2
 
 lambda_fs: 0.001

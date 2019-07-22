@@ -9,7 +9,7 @@ dirs:
         data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.list
-    restore: /data/sxu/easton/projects/EODM/models/timit_lm/checkpoint
+    # restore: /data/sxu/easton/projects/EODM/models/timit_lm/checkpoint
 
 data:
     dim_embedding: 64

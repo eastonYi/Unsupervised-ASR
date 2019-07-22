@@ -126,17 +126,17 @@ class LMDataSet(DataSet):
     """
     dataset for language model. Refer to the PTB dataset
     """
-    def __init__(self,list_files,args,_shuffle):
+    def __init__(self, list_files, args, _shuffle):
         self.list_files = list_files
         self.args = args
         self._shuffle = _shuffle
-        self.token2idx,self.idx2token = args.token2idx,args.idx2token
+        self.token2idx, self.idx2token = args.token2idx, args.idx2token
         self.start_id = 1
         if _shuffle:
             shuffle(self.list_files)
         self.size_dataset = self.get_size()
 
-    def __getitem__(self,idx):
+    def __getitem__(self, idx):
         pass
 
     def __call__(self):
@@ -162,8 +162,8 @@ class LMDataSet(DataSet):
         for filename in self.list_files:
             with open(filename) as f:
                 for line in f:
-                    line = line.strip().split(',')[1].split()
-                    if len(line) > self.args.list_bucket_boundaries[-1]:
+                    line = line.strip()
+                    if len(line) > self.args.max_seq_len:
                         continue
                     text_ids = [self.token2idx[word] for word in line]
                     src_ids = text_ids[:-1]
@@ -207,26 +207,11 @@ class TextDataSet(LMDataSet):
             with open(filename) as f:
                 for line in f:
                     line = line.strip().split()
-                    if len(line) > self.args.list_bucket_boundaries[-1]:
+                    if len(line) > self.args.max_seq_len:
                         continue
                     text_ids = [self.token2idx[word] for word in line]
 
                     yield text_ids
-
-    def batch(self, size, length):
-        list_sample = []
-        for filename in self.list_files:
-            with open(filename) as f:
-                for line in f:
-                    line = line.strip().split()
-                    if len(line) > self.args.list_bucket_boundaries[-1]:
-                        continue
-                    sample = [self.token2idx[word] for word in line] + [0] * length
-
-                    list_sample.append(sample[:length])
-                    if len(list_sample) >= size:
-                        yield np.array(list_sample, dtype=np.int32)
-                        list_sample = []
 
 
 def load_dataset(max_length, max_n_examples, max_vocab_size=2048, data_dir=''):
@@ -311,6 +296,7 @@ def make_32x32_dataset(dataset, batch_size, drop_remainder=True, shuffle=True, r
     len_dataset = len(train_images) // batch_size
 
     return dataset, img_shape, len_dataset
+
 
 def batch_dataset(dataset,
                   batch_size,

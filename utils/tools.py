@@ -15,11 +15,7 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
         self.warmup_steps = warmup_steps*1.0
         self.peak = peak*1.0
         self.decay_steps = decay_steps*1.0
-    # def __call__(self, step):
-    #     arg1 = tf.math.rsqrt(step)
-    #     arg2 = step * (self.warmup_steps ** -1.5)
-    #
-    #     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+        
     def __call__(self, step):
         warmup_steps, peak, decay_steps = self.warmup_steps, self.peak, self.decay_steps
         # warmup_steps = tf.to_float(warmup_steps)
@@ -413,3 +409,13 @@ def align_accuracy(P_output, labels):
 def get_predicts(P_output):
 
     return tf.argmax(P_output, axis=-1, output_type=tf.int32)
+
+
+def compute_ppl(logits, labels):
+    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits)
+    mask = tf.cast(labels > 0, dtype=tf.float32)
+    loss *= mask
+    loss_sum = tf.reduce_sum(loss)
+    token_sum = tf.reduce_sum(mask)
+
+    return loss_sum, token_sum
