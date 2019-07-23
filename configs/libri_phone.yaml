@@ -1,27 +1,22 @@
 dirs:
     train:
-        data: /data/sxu/easton/data/LibriSpeech/train-clean-100.phone.random.csv
-        # data: /data/sxu/easton/data/LibriSpeech/tfdata/train_39/1.csv
-        tfdata: /data/sxu/easton/data/LibriSpeech/tfdata/train
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/train-clean-100.phone.random.csv
+        tfdata: /data/sxu/easton/data/libriSpeech/libri_phone/tfdata/train
     dev:
-        data: /data/sxu/easton/data/LibriSpeech/dev1000.phone.csv
-        tfdata: /data/sxu/easton/data/LibriSpeech/tfdata/dev
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/dev1000.phone.csv
+        tfdata: /data/sxu/easton/data/libriSpeech/libri_phone/tfdata/dev
     test:
-        data: /data/sxu/easton/data/LibriSpeech/dev1000.phone.csv
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/dev1000.phone.csv
     type: csv
-    vocab: /data/sxu/easton/data/LibriSpeech/phones_42.txt
-    ngram: /data/sxu/easton/data/LibriSpeech/100h.5gram
-    # restore: /data/sxu/easton/projects/EODM/models/aishell_phone67/init_checkpoint/
-    lm_config: /data/sxu/easton/projects/EODM/configs/libri_lm.yaml
+    vocab: /data/sxu/easton/data/libriSpeech/libri_phone/phones_42.txt
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 10
-    downsample: 4
-    add_delta: False
+    num_context: 5
+    downsample: 2
+    add_delta: True
     unit: phone
-    full_align: True
     ngram: 5
     top_k: 400
     k: 400

@@ -406,6 +406,7 @@ def align_accuracy(P_output, labels):
 
     return acc
 
+
 def get_predicts(P_output):
 
     return tf.argmax(P_output, axis=-1, output_type=tf.int32)
@@ -441,3 +442,37 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     loss = tf.reduce_sum(loss) / tf.reduce_sum(mask)
 
     return loss
+
+
+def evaluation(tfdata_dev, dev_size, model):
+    list_acc = []
+
+    num_processed = 0
+    total_cer_dist = 0
+    total_cer_len = 0
+    for batch in tfdata_dev:
+        x, y, aligns = batch
+        logits = model(x)
+        acc = align_accuracy(logits, y)
+        list_acc.append(acc)
+        preds = get_predicts(logits)
+        batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), y)
+        total_cer_dist += batch_cer_dist
+        total_cer_len += batch_cer_len
+        num_processed += len(x)
+
+    cer = total_cer_dist/total_cer_len
+    fer = 1-np.mean(list_acc)
+    print('dev FER: {:.3f}\t dev PER: {:.3f}\t {} / {}'.format(
+           fer, cer, num_processed, dev_size))
+
+    return fer, cer
+
+
+def decode(sample, model):
+    x = np.array([sample['feature']], dtype=np.float32)
+    logits = model(x)
+    predits = get_predicts(logits)
+    print('predits: \n', predits.numpy()[0])
+    print('label: \n', sample['label'])
+    print('align: ', sample['align'])

@@ -9,13 +9,8 @@ dirs:
         data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.list
-    ngram: /data/sxu/easton/projects/EODM/all.ngram
-    # ngram: /data/sxu/easton/projects/EODM/all.2gram
-    # ngram: /data/sxu/easton/projects/EODM/all.3gram
-    # ngram: /data/sxu/easton/projects/EODM/all.4gram
-    # ngram: /data/sxu/easton/projects/EODM/all.6gram
-    # ngram: /data/sxu/easton/projects/EODM/all.9gram
-    restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/init_checkpoint
+    ngram: /data/sxu/easton/data/TIMIT/all.5gram
+    # restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/init_checkpoint
     # restore: /data/sxu/easton/projects/EODM/models/FC_phone_level/checkpoint
 
 data:
@@ -31,16 +26,15 @@ data:
     k: 1000
 
 model:
-    structure: fc
-    training_type: teacher-forcing
-    loss_type: CE
-    num_hidden: 128
-    num_layers: 1
+    G:
+        structure: fc
+        num_hidden: 128
+        num_layers: 1
 
 opti:
     type: adam
     warmup_steps: 100
-    peak: 0.001
+    peak: 0.0004
     decay_steps: 2000
     beam_size: 1
 
@@ -50,7 +44,8 @@ save_step: 50
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 20
+batch_size: 1000
+num_supervised: 250
 num_batch_tokens: 10
 bucket_boundaries: 1,2,3
 num_epochs: 100000

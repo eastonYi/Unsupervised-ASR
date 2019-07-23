@@ -1,17 +1,17 @@
 dirs:
     train:
-        data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
-        # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/train-clean-100.phone.random.csv
+        tfdata: /data/sxu/easton/data/libriSpeech/libri_phone/tfdata/train
     dev:
-        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/dev1000.phone.csv
+        tfdata: /data/sxu/easton/data/libriSpeech/libri_phone/tfdata/dev
     test:
-        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/dev1000.phone.csv
     lm:
-        data: /data/sxu/easton/data/AISHELL/train_phone.txt
+        data: /data/sxu/easton/data/libriSpeech/libri_phone/train-clean-100.txt
     type: csv
-    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    vocab: /data/sxu/easton/data/libriSpeech/libri_phone/phones_42.txt
+
 data:
     featType: mfcc
     dim_raw_input: 13
@@ -43,7 +43,7 @@ save_step: 50
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 250
+batch_size: 150
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000

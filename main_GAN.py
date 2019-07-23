@@ -10,7 +10,8 @@ from eastonCode.tfTools.tfData import TFData
 
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
-from utils.tools import batch_cer, gradient_penalty, frames_constrain_loss, aligns2indices, align_accuracy, get_predicts, CE_loss
+from utils.tools import gradient_penalty, frames_constrain_loss, aligns2indices,\
+    CE_loss, evaluation, decode
 
 from models.GAN import PhoneClassifier, PhoneDiscriminator
 
@@ -18,7 +19,7 @@ from models.GAN import PhoneClassifier, PhoneDiscriminator
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
 
-def train(Model):
+def train():
     dataset_dev = ASR_align_DataSet(
         file=[args.dirs.dev.data],
         args=args,
@@ -45,9 +46,9 @@ def train(Model):
             args=args,
             _shuffle=True)
 
-        tfdata_train = tf.data.Dataset.from_generator(
+        tfdata_train_text = tf.data.Dataset.from_generator(
             dataset_text, (tf.int32), (tf.TensorShape([None])))
-        iter_text = iter(tfdata_train.cache().repeat().shuffle(100).padded_batch(args.batch_size,
+        iter_text = iter(tfdata_train_text.cache().repeat().shuffle(100).padded_batch(args.batch_size,
             ([None])).prefetch(buffer_size=5))
 
     # create model paremeters
@@ -98,7 +99,7 @@ def train(Model):
                 tf.summary.scalar("costs/fs", fs, step=iteration)
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=iteration)
         if iteration % args.dev_step == 0:
-            fer, cer = evaluation(tfdata_dev, G)
+            fer, cer = evaluation(tfdata_dev, args.data.dev_size, G)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=iteration)
                 tf.summary.scalar("performance/cer", cer, step=iteration)
@@ -109,44 +110,6 @@ def train(Model):
             print('save model {}'.format(save_path))
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
-
-
-def evaluation(tfdata_dev, model):
-    list_acc = []
-
-    start_time = time()
-    num_processed = 0
-    progress = 0
-    total_cer_dist = 0
-    total_cer_len = 0
-    for batch in tfdata_dev:
-        x, y, aligns = batch
-        logits = model(x)
-        acc = align_accuracy(logits, y)
-        list_acc.append(acc)
-        preds = get_predicts(logits)
-        batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), y)
-        total_cer_dist += batch_cer_dist
-        total_cer_len += batch_cer_len
-        num_processed += len(x)
-        progress = num_processed / args.data.dev_size
-
-    cer = total_cer_dist/total_cer_len
-    fer = 1-np.mean(list_acc)
-    print('dev FER: {:.3f}\t dev PER: {:.3f}\t {:.2f}min {} / {}'.format(
-           fer, cer, (time()-start_time)/60, num_processed, args.data.dev_size))
-
-    return fer, cer
-
-
-def decode(dataset, model):
-    sample = dataset[0]
-    x = np.array([sample['feature']], dtype=np.float32)
-    logits = model(x)
-    predits = get_predicts(logits)
-    print('predits: \n', predits.numpy()[0])
-    print('label: \n', sample['label'])
-    print('align: ', sample['align'])
 
 
 def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
@@ -236,7 +199,7 @@ if __name__ == '__main__':
         assert len(gpus) > 0, "Not enough GPU hardware devices available"
         [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
         print('enter the TRAINING phrase')
-        train(args.Model)
+        train()
 
 
         # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
