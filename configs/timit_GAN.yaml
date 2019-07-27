@@ -24,7 +24,7 @@ data:
 
 model:
     G:
-        structure: fc
+        structure: lstm
         num_hidden: 512
         num_layers: 1
     D:
@@ -53,5 +53,5 @@ num_steps: 500000
 max_seq_len: 300
 seed: 2
 
-lambda_fs: 0.001
+lambda_fs: 0.05
 lambda_gp: 10.0

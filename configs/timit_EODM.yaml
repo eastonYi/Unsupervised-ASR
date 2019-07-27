@@ -19,8 +19,7 @@ data:
     num_context: 5
     downsample: 1
     add_delta: True
-    unit: word
-    full_align: True
+    unit: phone
     ngram: 5
     top_k: 1000
     k: 1000
@@ -28,30 +27,24 @@ data:
 model:
     G:
         structure: fc
-        num_hidden: 128
+        num_hidden: 512
         num_layers: 1
 
 opti:
     type: adam
-    warmup_steps: 100
-    peak: 0.0004
-    decay_steps: 2000
-    beam_size: 1
+    lr: 0.0004
 
 dev_step: 50
-decode_step: 200
-save_step: 50
+decode_step: 100
+save_step: 100
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 1000
+batch_size: 260
 num_supervised: 250
 num_batch_tokens: 10
 bucket_boundaries: 1,2,3
 num_epochs: 100000
 num_steps: 500000
 
-length_penalty_weight: 0.0
-lambda_fs: 0.000001
-
-grad_clip_global_norm: 0.0
+lambda_fs: 0.0

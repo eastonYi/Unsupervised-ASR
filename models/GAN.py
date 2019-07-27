@@ -14,21 +14,6 @@ def Conv1D(dim_output, kernel_size):
     return conv_op
 
 
-def ResBlock(inputs, list_Conv1D, list_norms):
-    output = inputs
-
-    output = list_Conv1D[0](output)
-    output = list_norms[0](output)
-    output = tf.nn.relu(output)
-    # output = tf.keras.layers.LeakyReLU(alpha=0.2)(output)
-    output = list_Conv1D[1](output)
-    output = list_norms[1](output)
-    output = tf.nn.relu(output)
-    # output = tf.keras.layers.LeakyReLU(alpha=0.2)(output)
-
-    return inputs + (0.3*output)
-
-
 def PhoneClassifier(args):
     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
                                         name='generator_input_x')
@@ -39,6 +24,11 @@ def PhoneClassifier(args):
         for _ in range(args.model.G.num_layers):
             x = LSTM(args.model.G.num_hidden,
                      return_sequences=True)(x)
+    elif args.model.G.structure == 'gru':
+        for _ in range(args.model.G.num_layers):
+            x = tf.keras.layers.GRU(args.model.G.num_hidden,
+                                    dropout=args.model.G.dropout,
+                                    return_sequences=True)(x)
     elif args.model.G.structure == 'blstm':
         for _ in range(args.model.G.num_layers):
             x = Bidirectional(LSTM(args.model.G.num_hidden,
@@ -64,7 +54,7 @@ def PhoneDiscriminator(args):
                                                   dtype=tf.bool)
     pad_mask = tf.cast(pad_mask, tf.float32)
 
-    x = Dense(dim_hidden, use_bias=False)(x)
+    x = Dense(dim_hidden, use_bias=False, activation='linear')(x)
 
     for i in range(args.model.D.num_blocks):
         inputs = x
@@ -88,60 +78,34 @@ def PhoneDiscriminator(args):
 
     return model
 
-#
-# class Generator(tf.keras.Model):
-#
-#     def __init__(self, dim_hidden, seq_len, dim_output):
-#         super().__init__()
-#         self.dim_hidden = dim_hidden
-#         self.seq_len = seq_len
-#         self.dim_output = dim_output
-#         self.input_layer = Dense(dim_hidden*seq_len, activation=None)
-#         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
-#                             for _ in range(10)]
-#         self.list_norms = [tf.keras.layers.BatchNormalization() for _ in range(10)]
-#         self.list_Conv1D.append(Conv1D(dim_output=dim_output, kernel_size=1))
-#
-#         self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
-#
-#     def call(self, n_samples, SEQ_LEN):
-#         output = tf.random.normal(shape=[n_samples, 128])
-#         output = self.input_layer(output)
-#         output = tf.reshape(output, [n_samples, SEQ_LEN, self.dim_hidden])
-#         for i in range(5):
-#             output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
-#         output = self.list_Conv1D[-1](output)
-#         output = tf.nn.softmax(output)
-#
-#         return output
-#
-#
-# class Discriminator(tf.keras.Model):
-#
-#     def __init__(self, dim_hidden, seq_len):
-#         super().__init__()
-#         self.dim_hidden = dim_hidden
-#         self.seq_len = seq_len
-#         self.embedding_layer = Dense(dim_hidden, use_bias=False)
-#         self.list_Conv1D = [Conv1D(dim_output=dim_hidden, kernel_size=5)
-#                             for _ in range(10)]
-#         self.list_norms = [tf.keras.layers.BatchNormalization() for _ in range(10)]
-#         # self.input_layer = Conv1D(dim_output=dim_hidden, kernel_size=1)
-#         self.final_layer = Dense(1, activation=None)
-#         # self.final_layer = Conv1D(dim_output=1, kernel_size=1)
-#
-#         self.optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5, beta_2=0.9)
-#
-#     def call(self, inputs):
-#         batch_size = inputs.shape[0]
-#         dim_input = inputs.shape[-1]
-#         inputs = tf.image.random_crop(inputs, [batch_size, self.seq_len, dim_input])
-#         output = self.embedding_layer(inputs)
-#         # output = self.input_layer(inputs)
-#         for i in range(5):
-#             output = ResBlock(output, self.list_Conv1D[2*i: 2*i+2], self.list_norms[2*i: 2*i+2])
-#         output = tf.reshape(output, [batch_size, -1])
-#         output = self.final_layer(output)
-#         # output = tf.reduce_mean(output[:, :, 0], -1)
-#
-#         return output
+
+def PhoneDiscriminator2(args):
+    dim_hidden = args.model.D.num_hidden
+
+    x = input = tf.keras.layers.Input(shape=[args.max_seq_len, args.dim_output],
+                                      name='discriminator_input_x')
+
+    x = Dense(dim_hidden, use_bias=False, activation='linear')(x)
+
+    for i in range(args.model.D.num_blocks):
+        inputs = x
+        x = Conv1D(dim_output=dim_hidden, kernel_size=3)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        x = inputs + 1.0*x
+        x = tf.keras.layers.MaxPooling1D(padding='same')(x)
+
+    x = Conv1D(dim_output=10, kernel_size=7)(x)
+    _, time, hidden = x.shape
+    x = tf.reshape(x, [-1, time*hidden])
+    output = Dense(1, activation='linear')(x)
+
+    model = tf.keras.Model(inputs=input,
+                           outputs=output,
+                           name='sequence_discriminator')
+
+    return model

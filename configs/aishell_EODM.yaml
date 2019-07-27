@@ -12,6 +12,9 @@ dirs:
         data: /data/sxu/easton/data/AISHELL/train_phone.txt
     type: csv
     vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    ngram: /data/sxu/easton/data/AISHELL/110k_67.ngram
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/aishell_EODM/fs_0.005/checkpoint
+
 data:
     featType: mfcc
     dim_raw_input: 13
@@ -19,23 +22,25 @@ data:
     downsample: 2
     add_delta: True
     unit: phone
+    ngram: 5
+    top_k: 1000
+    k: 1000
 
 model:
     G:
         structure: fc
         num_hidden: 512
         num_layers: 1
-    D:
-        num_hidden: 512
-        num_blocks: 5
+        # structure: gru
+        # num_hidden: 128
+        # num_layers: 1
+        # dropout: 0.5
 
 opti:
     type: adam
-    D_G_rate: 1
-    G:
-        lr: 0.0005
-    D:
-        lr: 0.0005
+    lr: 0.0004
+    # type: sgd
+    # lr: 0.1
 
 dev_step: 200
 decode_step: 200
@@ -43,15 +48,11 @@ save_step: 200
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 250
+batch_size: 1100
 num_supervised: 250
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
-num_epochs: 100000
-num_steps: 500000
-max_seq_len: 250
 seed: 8
 
 lambda_fs: 0.005
-lambda_gp: 10.0
 lambda_supervision: 1.0

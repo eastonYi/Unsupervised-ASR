@@ -3,13 +3,10 @@ from datetime import datetime
 from time import time
 import os
 import tensorflow as tf
-import numpy as np
-from random import sample
 
-from eastonCode.tfTools.tfData import TFData
 from utils.dataset import ASR_align_DataSet
 from utils.arguments import args
-from utils.tools import sampleFrames, read_ngram, ngram2kernel, CE_loss, evaluation, decode, aligns2indices
+from utils.tools import TFData, read_ngram, ngram2kernel, CE_loss, evaluation, decode, aligns2indices, frames_constrain_loss
 from models.EODM import P_Ngram, EODM_loss
 
 
@@ -24,15 +21,15 @@ def train(Model):
         tfdata_train = TFData(dataset=None,
                         dataAttr=['feature', 'label', 'align'],
                         dir_save=args.dirs.train.tfdata,
-                        args=args).read(_shuffle=True)
+                        args=args).read(_shuffle=False)
         tfdata_dev = TFData(dataset=None,
                         dataAttr=['feature', 'label', 'align'],
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read(_shuffle=False)
 
-        x_0, y_0, aligns_0 = next(iter(tfdata_train.shuffle(5000).take(args.num_supervised).\
+        x_0, y_0, aligns_0 = next(iter(tfdata_train.take(args.num_supervised).\
             padded_batch(args.num_supervised, ([None, args.dim_input], [None], [None]))))
-        iter_train = iter(tfdata_train.cache().repeat().shuffle(1000).\
+        iter_train = iter(tfdata_train.cache().repeat().shuffle(3000).\
             padded_batch(args.batch_size, ([None, args.dim_input], [None], [None])).prefetch(buffer_size=3))
         tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
 
@@ -47,44 +44,45 @@ def train(Model):
     compute_p_ngram.summary()
 
     # build optimizer
-    optimizer_G = tf.keras.optimizers.Adam(args.opti.peak, beta_1=0.5, beta_2=0.9)
+    if args.opti.type == 'adam':
+        optimizer = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
+        # optimizer = tf.keras.optimizers.Adam(args.opti.lr*0.1, beta_1=0.5, beta_2=0.9)
+    elif args.opti.type == 'sgd':
+        optimizer = tf.keras.optimizers.SGD(lr=args.opti.lr, momentum=0.9, decay=0.98)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
-    ckpt = tf.train.Checkpoint(model=model, optimizer_G = optimizer_G)
+    ckpt = tf.train.Checkpoint(model=model, optimizer = optimizer)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=5)
+    step = 0
 
     # if a checkpoint exists, restore the latest checkpoint.
     if args.dirs.checkpoint:
         _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
         ckpt.restore(_ckpt_manager.latest_checkpoint)
         print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-    x_0, y_0, aligns_0 = next(iter_train)
+        step = int(_ckpt_manager.latest_checkpoint.split('-')[-1])
 
     start_time = datetime.now()
-    get_data_time = 0
     num_processed = 0
     progress = 0
 
-    for step in range(99999):
-        run_model_time = time()
+    # step = 1600
+    while step < 99999999:
+        start = time()
 
         x, _, aligns = next(iter_train)
-        loss_EODM = train_step(x, aligns, py, model, compute_p_ngram, optimizer_G)
-        loss_supervise = train_G_supervised(x_0, y_0, model, optimizer_G, args.dim_output)
+        loss_EODM, loss_fs = train_step(x, aligns, py, model, compute_p_ngram, optimizer, args.lambda_fs)
+        loss_supervise = train_G_supervised(x_0, y_0, model, optimizer, args.dim_output)
 
         num_processed += len(x)
-        get_data_time = run_model_time - get_data_time
-        run_model_time = time() - run_model_time
-
         progress = num_processed / args.data.train_size
         if step % 10 == 0:
-            print('EODM loss: {:.2f}\t loss_supervise: {:.3f}\tbatch: {} time: {:.2f}|{:.2f} s {:.3f}% step: {}'.format(
-                   loss_EODM, loss_supervise, x.shape, get_data_time, run_model_time, progress*100.0, step))
+            print('EODM loss: {:.2f}\tloss_fs: {:.3f} * {}\tloss_supervise: {:.3f} * {}\tbatch: {} time: {:.2f} s {:.3f}% step: {}'.format(
+                   loss_EODM, loss_fs, args.lambda_fs, loss_supervise, args.lambda_supervision, x.shape, time()-start, progress*100.0, step))
             with writer.as_default():
                 tf.summary.scalar("costs/loss_EODM", loss_EODM, step=step)
+                tf.summary.scalar("costs/loss_fs", loss_fs, step=step)
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
-
-        get_data_time = time()
 
         if step % args.dev_step == 0:
             fer, cer = evaluation(tfdata_dev, args.data.dev_size, model)
@@ -94,65 +92,62 @@ def train(Model):
         if step % args.decode_step == 0:
             decode(dataset_dev[0], model)
         if step % args.save_step == 0:
-            ckpt_manager.save()
+            save_path = ckpt_manager.save(step)
+            print('save model {}'.format(save_path))
+
+        step += 1
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
 
-def monitor_EODM_loss(tfdata_train, model, ngram_py):
-    list_pz = []
-    list_K = []
-    list_mini_EODM = []
-
-    start_time = time()
-    num_processed = 0
-    for batch in tfdata_train:
-        x, y, aligns = batch
-
-        aligns_sampled = sampleFrames(aligns)
-        ngram_sampled = sample(ngram_py, args.data.top_k)
-        kernel, py = ngram2kernel(ngram_sampled, args)
-        logits = model(x, training=False)
-        pz, K = model.EODM(logits, aligns_sampled, kernel)
-        list_pz.append(pz)
-        list_K.append(K)
-        list_mini_EODM.append(model.EODM_loss(logits, aligns_sampled, kernel, py).numpy())
-
-        num_processed += len(x)
-
-    pz = tf.reduce_sum(list_pz, 0) / tf.reduce_sum(list_K, 0)
-    loss_EODM = tf.reduce_sum(- py * tf.math.log(pz+1e-17)) # ngram loss
-    print('Full-batch EODM loss: {:.3f}\t mini-batch EODM loss: {:.3f}\t {:.2f}min {} / {}'.format(
-           loss_EODM, np.mean(list_mini_EODM), (time()-start_time)/60, num_processed, args.data.train_size))
-
-    return loss_EODM
-
-
-def train_step(x, aligns, py, model, compute_p_ngram, optimizer):
+def train_step(x, aligns, py, model, compute_p_ngram, optimizer, lambda_fs):
     indices = aligns2indices(aligns)
     with tf.GradientTape(watch_accessed_variables=False) as tape:
         tape.watch(model.variables)
         logits = model(x, training=True)
         _logits = tf.gather_nd(logits, indices)
         loss_EODM = EODM_loss(_logits, aligns>0, compute_p_ngram, args.data.top_k, py)
-        loss = loss_EODM
+        # loss_EODM = 0
+        loss_fs = frames_constrain_loss(logits, aligns) if lambda_fs > 0 else 0
+        loss = loss_EODM + lambda_fs * loss_fs
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-    return loss
+    return loss_EODM, loss_fs
 
 
 @tf.function
-def train_G_supervised(x, labels, G, optimizer_G, dim_output):
+def train_G_supervised(x, labels, G, optimizer, dim_output):
     with tf.GradientTape() as tape_G:
         logits = G(x, training=True)
         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
         gen_loss = ce_loss
 
     gradients_G = tape_G.gradient(gen_loss, G.trainable_variables)
-    optimizer_G.apply_gradients(zip(gradients_G, G.trainable_variables))
+    optimizer.apply_gradients(zip(gradients_G, G.trainable_variables))
 
     return gen_loss
+
+
+def train_step_with_supervision(x, aligns, x_0, y_0, py, model, compute_p_ngram, optimizer, dim_output, lambda_fs, lambda_supervision):
+    indices = aligns2indices(aligns)
+    with tf.GradientTape(watch_accessed_variables=False) as tape:
+        tape.watch(model.variables)
+        logits = model(x, training=True)
+        _logits = tf.gather_nd(logits, indices)
+        loss_EODM = EODM_loss(_logits, aligns>0, compute_p_ngram, args.data.top_k, py)
+        # loss_EODM = 0
+
+        loss_fs = frames_constrain_loss(logits, aligns) if lambda_fs > 0 else 0
+
+        logits_0 = model(x_0, training=True)
+        loss_supervise = CE_loss(logits_0, y_0, dim_output, confidence=0.9)
+
+        loss = loss_EODM + lambda_fs * loss_fs + lambda_supervision * loss_supervise
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+    return loss_EODM, loss_fs, loss_supervise
 
 
 # def lm_assistant(Model, Model_LM):
@@ -296,11 +291,9 @@ if __name__ == '__main__':
         args.dir_exps = args.dir_exps /  param.name
         args.dir_log = args.dir_exps / 'log'
         args.dir_checkpoint = args.dir_exps / 'checkpoint'
-        if args.dir_exps.is_dir():
-            os.system('rm -r '+ str(args.dir_exps))
-        args.dir_exps.mkdir()
-        args.dir_log.mkdir()
-        args.dir_checkpoint.mkdir()
+        if not args.dir_exps.is_dir(): args.dir_exps.mkdir()
+        if not args.dir_log.is_dir(): args.dir_log.mkdir()
+        if not args.dir_checkpoint.is_dir(): args.dir_checkpoint.mkdir()
         with open(args.dir_exps / 'configs.txt', 'w') as fw:
             print(args, file=fw)
 

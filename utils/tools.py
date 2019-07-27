@@ -351,7 +351,7 @@ def gradient_penalty(D, real, fake, mask_real=None, mask_fake=None):
 
     with tf.GradientTape() as t:
         t.watch(x)
-        pred = D([x, mask])
+        pred = D(x)
     grad = t.gradient(pred, x)
     norm = tf.norm(tf.reshape(grad, [tf.shape(grad)[0], -1]), axis=1)
     gp = tf.reduce_mean((norm - 1.)**2)
