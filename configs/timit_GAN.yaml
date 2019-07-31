@@ -24,7 +24,7 @@ data:
 
 model:
     G:
-        structure: lstm
+        structure: fc
         num_hidden: 512
         num_layers: 1
     D:
@@ -46,11 +46,12 @@ save_step: 50
 gpus: '0'
 # gpus: '1,2,3'
 batch_size: 250
+num_supervised: 100
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
-max_seq_len: 300
+max_seq_len: 60
 seed: 2
 
 lambda_fs: 0.05

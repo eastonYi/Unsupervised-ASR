@@ -377,17 +377,22 @@ def frames_constrain_loss(logits, align):
     return tf.reduce_sum(loss)
 
 
-def aligns2indices(aligns, sample=True):
+def aligns2indices(aligns, sample='random'):
     """
     aligns:
     return please ignore the value in sample where in aligns is 0
     """
-    if sample:
+    if sample == 'random':
         aligns = tf.cast(aligns, tf.float32)
         _aligns = tf.pad(aligns, [[0, 0], [1, 0]])[:, :-1]
         sampled_aligns = tf.cast((_aligns + (aligns-_aligns)*
             tf.random.uniform(aligns.shape))*tf.cast(aligns > 0, tf.float32), tf.int32)
-    else:
+    elif sample == 'middle':
+        aligns = tf.cast(aligns, tf.float32)
+        _aligns = tf.pad(aligns, [[0, 0], [1, 0]])[:, :-1]
+        sampled_aligns = tf.cast((_aligns + (aligns-_aligns)*
+            0.5*tf.ones_like(aligns))*tf.cast(aligns > 0, tf.float32), tf.int32)
+    elif sample == 'end':
         sampled_aligns = aligns
     batch_idx = tf.tile(tf.range(aligns.shape[0])[:, None], [1, aligns.shape[1]])
     indices = tf.stack([batch_idx, sampled_aligns], -1)
@@ -453,12 +458,17 @@ def evaluation(tfdata_dev, dev_size, model):
     for batch in tfdata_dev:
         x, y, aligns = batch
         logits = model(x)
+
         acc = align_accuracy(logits, y)
         list_acc.append(acc)
-        preds = get_predicts(logits)
+
+        indices = aligns2indices(aligns, 'middle')
+        _logits = tf.gather_nd(logits, indices)
+        preds = get_predicts(_logits)
         batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), y)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
+
         num_processed += len(x)
 
     cer = total_cer_dist/total_cer_len
@@ -469,10 +479,35 @@ def evaluation(tfdata_dev, dev_size, model):
     return fer, cer
 
 
-def decode(sample, model):
+def monitor(sample, model):
     x = np.array([sample['feature']], dtype=np.float32)
     logits = model(x)
-    predits = get_predicts(logits)
-    print('predits: \n', predits.numpy()[0])
+    predicts = get_predicts(logits)
+    print('predicts: \n', predicts.numpy()[0])
     print('label: \n', sample['label'])
     print('align: ', sample['align'])
+
+
+def decode(dataset, model, idx2token, save_file, log=False):
+    with open(save_file, 'w') as fw:
+        for sample in tqdm(dataset):
+            x = np.array([sample['feature']], dtype=np.float32)
+            logits = model(x)
+            align = sample['align']
+            uttid = sample['id'].split('/')[-2] + '_' + sample['id'].split('/')[-1].split('.')[0]
+            indices = aligns2indices([align], 'middle')
+            _logits = tf.gather_nd(logits, indices)
+            predicts = get_predicts(_logits)[0]
+            idx_prev = None
+            list_tokens = []
+            for idx in predicts:
+                idx = idx.numpy()
+                if idx_prev == idx:
+                    continue
+                list_tokens.append(idx2token[idx])
+                idx_prev = idx
+            line = ' '.join(list_tokens)
+            if log:
+                print('label: ', sample['label'])
+                print('predicts: ', list_tokens)
+            fw.write(uttid + ' ' + line + '\n')

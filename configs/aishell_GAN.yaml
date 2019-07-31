@@ -43,13 +43,13 @@ save_step: 200
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 250
+batch_size: 1000
 num_supervised: 250
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
-max_seq_len: 250
+max_seq_len: 60
 seed: 8
 
 lambda_fs: 0.005

@@ -10,7 +10,7 @@ from eastonCode.tfTools.tfData import TFData
 
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluation, decode
+from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluation, decode, monitor
 
 from models.GAN import PhoneClassifier
 
@@ -18,7 +18,7 @@ from models.GAN import PhoneClassifier
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
 
-def train():
+def Train():
     dataset_dev = ASR_align_DataSet(
         file=[args.dirs.dev.data],
         args=args,
@@ -81,7 +81,7 @@ def train():
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
-            decode(dataset_dev[0], model)
+            monitor(dataset_dev[0], model)
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
@@ -89,6 +89,30 @@ def train():
         step += 1
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
+
+
+def Decode(save_file):
+    dataset = ASR_align_DataSet(
+        file=[args.dirs.train.data],
+        args=args,
+        _shuffle=False,
+        transform=True)
+    # dataset = ASR_align_DataSet(
+    #     file=[args.dirs.dev.data],
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
+
+    model = PhoneClassifier(args)
+    model.summary()
+
+    optimizer_G = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
+    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
+
+    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(_ckpt_manager.latest_checkpoint)
+    print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+    decode(dataset, model, args.idx2token, 'output/'+save_file)
 
 
 # @tf.function
@@ -116,25 +140,34 @@ if __name__ == '__main__':
     param = parser.parse_args()
 
     print('CUDA_VISIBLE_DEVICES: ', param.gpu)
-
-    if param.name:
-        args.dir_exps = args.dir_exps /  param.name
-        args.dir_log = args.dir_exps / 'log'
-        args.dir_checkpoint = args.dir_exps / 'checkpoint'
-        if args.dir_exps.is_dir():
-            os.system('rm -r '+ str(args.dir_exps))
-        args.dir_exps.mkdir()
-        args.dir_log.mkdir()
-        args.dir_checkpoint.mkdir()
-        with open(args.dir_exps / 'configs.txt', 'w') as fw:
-            print(args, file=fw)
+    os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    assert len(gpus) > 0, "Not enough GPU hardware devices available"
+    [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
 
     if param.mode == 'train':
-        os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
-        gpus = tf.config.experimental.list_physical_devices('GPU')
-        assert len(gpus) > 0, "Not enough GPU hardware devices available"
-        [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
+        """
+        python ../../main.py -m decode --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
+        """
+        if param.name:
+            args.dir_exps = args.dir_exps / param.name
+            args.dir_log = args.dir_exps / 'log'
+            args.dir_checkpoint = args.dir_exps / 'checkpoint'
+            if args.dir_exps.is_dir():
+                os.system('rm -r '+ str(args.dir_exps))
+            args.dir_exps.mkdir()
+            args.dir_log.mkdir()
+            args.dir_checkpoint.mkdir()
+            with open(args.dir_exps / 'configs.txt', 'w') as fw:
+                print(args, file=fw)
         print('enter the TRAINING phrase')
-        train()
+        Train()
 
-        # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
+    elif param.mode == 'decode':
+        """
+        python main_supervise.py -m decode --name timit_supervised2_decode.txt --gpu 0 -c configs/timit_supervised2.yaml
+        """
+        print('enter the DECODING phrase')
+        assert args.dirs.checkpoint
+        assert param.name
+        Decode(param.name)

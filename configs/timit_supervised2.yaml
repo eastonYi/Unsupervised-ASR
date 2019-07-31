@@ -9,6 +9,7 @@ dirs:
         data: /data/sxu/easton/data/TIMIT/test_phone39.csv
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.list
+    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised2/full_big/checkpoint
 
 data:
     featType: fbank
@@ -20,12 +21,9 @@ data:
 
 model:
     G:
-        # structure: fc
-        # num_hidden: 512
-        # num_layers: 1
-        structure: lstm
-        num_hidden: 128
-        num_layers: 1
+        structure: fc
+        num_hidden: 512
+        num_layers: 5
 
 opti:
     type: adam
@@ -38,6 +36,6 @@ save_step: 100
 gpus: '0'
 # gpus: '1,2,3'
 batch_size: 600
-num_supervised: 250
+num_supervised:
 num_batch_tokens: 10
 bucket_boundaries: 1,2,3

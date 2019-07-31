@@ -8,9 +8,9 @@ import tensorflow as tf
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
 from utils.tools import TFData, gradient_penalty, frames_constrain_loss, aligns2indices,\
-    CE_loss, evaluation, decode
+    CE_loss, evaluation, monitor, decode
 
-from models.GAN import PhoneClassifier, PhoneDiscriminator2
+from models.GAN import PhoneClassifier, PhoneDiscriminator2, PhoneDiscriminator3
 
 
 tf.random.set_seed(args.seed)
@@ -51,7 +51,7 @@ def train():
 
     # create model paremeters
     G = PhoneClassifier(args)
-    D = PhoneDiscriminator2(args)
+    D = PhoneDiscriminator3(args)
     G.summary()
     D.summary()
     optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
@@ -103,7 +103,7 @@ def train():
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
-            decode(dataset_dev[0], G)
+            monitor(dataset_dev[0], G)
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
@@ -161,7 +161,7 @@ def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
     return disc_cost, gp
 
 
-# @tf.function
+@tf.function
 def train_G_supervised(x, labels, G, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
         logits = G(x, training=True)

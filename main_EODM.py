@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from utils.dataset import ASR_align_DataSet
 from utils.arguments import args
-from utils.tools import TFData, read_ngram, ngram2kernel, CE_loss, evaluation, decode, aligns2indices, frames_constrain_loss
+from utils.tools import TFData, read_ngram, ngram2kernel, CE_loss, evaluation, decode, monitor, aligns2indices, frames_constrain_loss
 from models.EODM import P_Ngram, EODM_loss
 
 
@@ -90,7 +90,7 @@ def train(Model):
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
-            decode(dataset_dev[0], model)
+            monitor(dataset_dev[0], model)
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
