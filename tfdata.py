@@ -8,34 +8,39 @@ from pathlib import Path
 
 def main():
     dataset_train = ASR_align_DataSet(
-        file=[args.dirs.train.data],
+        trans_file=args.dirs.train.trans,
+        align_file=args.dirs.train.align,
+        uttid2wav=args.dirs.train.wav_scp,
         args=args,
         _shuffle=False,
         transform=True)
     dataset_dev = ASR_align_DataSet(
-        file=[args.dirs.dev.data],
+        trans_file=args.dirs.dev.trans,
+        uttid2wav=args.dirs.dev.wav_scp,
+        align_file=None,
         args=args,
         _shuffle=False,
         transform=True)
-    tfdata_train = TFData(dataset=dataset_train,
-                    dataAttr=['feature', 'label', 'align'],
+    feature_train = TFData(dataset=dataset_train,
                     dir_save=args.dirs.train.tfdata,
                     args=args)
-    tfdata_dev = TFData(dataset=dataset_dev,
-                    dataAttr=['feature', 'label', 'align'],
+    feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    tfdata_train.save('0')
-    tfdata_dev.save('0')
-    # tfdata_train.get_bucket_size(100, True)
+    # feature_train.save('0')
+    # feature_dev.save('0')
     # split_save()
-    # for sample in tfdata_dev.read():
-    # # for sample in dataset_train:
-    #     # print(sample['feature'].shape)
-    #     # print(sample['label'])
-    #     print(sample[0].shape)
-    #     import pdb; pdb.set_trace()
-    dataset_train.get_dataset_ngram(n=args.data.ngram, k=10000, savefile=args.dirs.ngram)
+    # for uttid_feature in feature_dev.read():
+    #     uttid, feature = uttid_feature
+    #     uttid = uttid.numpy()
+    #     _trans = dataset_dev.get_attrs('trans', [uttid])
+    #     dataset_dev.get_attrs('trans', dataset_dev.list_uttids[:10])
+
+    for sample in dataset_dev:
+        print(sample['feature'].shape)
+        print(sample['trans'])
+        import pdb; pdb.set_trace()
+    # dataset_train.get_dataset_ngram(n=args.data.ngram, k=10000, savefile=args.dirs.ngram)
     # import pdb; pdb.set_trace()
     # print()
 
@@ -64,11 +69,11 @@ def split_save(capacity=10000):
             _shuffle=False,
             transform=True)
         tfdata_train = TFData(dataset=dataset_train,
-                        dataAttr=['feature', 'label', 'align'],
                         dir_save=args.dirs.train.tfdata,
                         args=args)
 
         tfdata_train.save(i.name.split('.')[0])
+
 
 if __name__ == '__main__':
     import os

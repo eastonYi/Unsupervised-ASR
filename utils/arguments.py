@@ -28,9 +28,6 @@ args = AttrDict(yaml.load(open(CONFIG_FILE), Loader=yaml.SafeLoader))
 
 args.num_gpus = len(args.gpus.split(','))
 args.list_gpus = ['/gpu:{}'.format(i) for i in range(args.num_gpus)]
-args.list_bucket_boundaries = [int(i) for i in args.bucket_boundaries.split(',')]
-args.list_batch_size = ([int(args.num_batch_tokens / boundary) * max(args.num_gpus, 1)
-        for boundary in (args.list_bucket_boundaries)] + [max(args.num_gpus, 1)])
 
 # dirs
 dir_dataInfo = Path.cwd() / 'data'
@@ -64,6 +61,6 @@ try:
 except:
     print("have not converted to tfdata yet: ")
 
-if args.dirs.lm_config:
-    args.args_lm = AttrDict(yaml.load(open(args.dirs.lm_config), Loader=yaml.SafeLoader))
-    args.args_lm.dim_output = len(args.token2idx)
+# if args.dirs.lm_config:
+#     args.args_lm = AttrDict(yaml.load(open(args.dirs.lm_config), Loader=yaml.SafeLoader))
+#     args.args_lm.dim_output = len(args.token2idx)

@@ -3,15 +3,15 @@
 import os
 import numpy as np
 import logging
-import collections
+from collections import defaultdict, Counter
 from tqdm import tqdm
 from random import shuffle, random, randint
 import multiprocessing
 import tensorflow as tf
 
-from .dataProcess import audio2vector,get_audio_length,process_raw_feature
-from eastonCode.dataProcessing.dataHelper import DataSet,SimpleDataLoader
-from utils.dataProcess import get_alignRate
+from .dataProcess import audio2vector, get_audio_length, process_raw_feature
+from eastonCode.dataProcessing.dataHelper import DataSet, SimpleDataLoader
+# from utils.dataProcess import get_alignRate
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
 
@@ -25,13 +25,9 @@ class ASRDataSet(DataSet):
         self.token2idx,self.idx2token = args.token2idx,args.idx2token
 
     @staticmethod
-    def gen_utter_list(list_files):
-        list_utter = []
-        for file in list_files:
-            with open(file) as f:
-                list_utter.extend(f.readlines())
+    def gen_utter_list(file):
 
-        return list_utter
+        return list(open(file).readlines())
 
     def shuffle_utts(self):
         shuffle(self.list_utterances)
@@ -40,86 +36,215 @@ class ASRDataSet(DataSet):
         return len(self.list_utterances)
 
 
+# class ASR_align_DataSet(ASRDataSet):
+#     """
+#     for dataset with alignment,i.e. TIMIT
+#     csv: path/to/wav.wav,a b c d e,1000 2000 3000
+#     """
+#     def __init__(self, file, args, _shuffle, transform):
+#         super().__init__(file, args, _shuffle, transform)
+#         self.list_utterances = self.gen_utter_list(file)
+#         self.align_rate = get_alignRate(self.list_utterances[0].split(',')[0], self.args)
+#
+#         if _shuffle:
+#             self.shuffle_utts()
+#
+#     def __getitem__(self,idx):
+#         utterance = self.list_utterances[idx]
+#         wav, seq_label, stamps = utterance.strip().split(',')
+#         feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+#         if self.transform:
+#             feat = process_raw_feature(feat, self.args)
+#
+#         seq_label = np.array(
+#             [self.token2idx.get(word, self.token2idx['sil'])
+#              for word in seq_label.split(' ')],
+#             dtype=np.int32)
+#
+#         stamps = np.array([int(int(stamp)/self.align_rate) for stamp in stamps.split(' ')], dtype=np.int32)
+#
+#         align = self.get_align(seq_label, stamps, len(feat))
+#
+#         sample = {'id': wav, 'feature': feat, 'align': align, 'stamps': stamps}
+#
+#         return sample
+#
+#     def get_align(self, seq_label, align, len_feature=None):
+#         time = -1
+#         align = []
+#         for label, now in zip(seq_label, align):
+#             duration = now - time
+#             align.extend([label]*duration)
+#             time = now
+#
+#         if len_feature:
+#             pad = abs(len_feature - len(align))
+#             align.extend([label]*pad)
+#             align = align[:len_feature]
+#
+#         return np.array(align, dtype=np.int32)
+
+
 class ASR_align_DataSet(ASRDataSet):
     """
-    for dataset with alignment,i.e. TIMIT
-    csv: path/to/wav.wav,a b c d e,1000 2000 3000
+    for dataset with alignment, i.e. TIMIT
+    needs:
+        vocab.txt remains the index of phones in phones.txt !!
+        - align_file
+            uttid phone_id phone_id ...
+        - trans_file
+
+        - uttid2wav.txt
+            uttid wav
+        - vocab.txt (used for model output)
+            phone
+        -
     """
-    def __init__(self,file,args,_shuffle,transform):
-        super().__init__(file,args,_shuffle,transform)
-        self.list_utterances = self.gen_utter_list(file)
-        self.align_rate = get_alignRate(self.list_utterances[0].split(',')[0], self.args)
+    def __init__(self, trans_file, align_file, uttid2wav, args, _shuffle, transform):
+        super().__init__(align_file, args, _shuffle, transform)
+        self.dict_wavs = self.load_uttid2wav(uttid2wav)
+        self.dict_trans = self.load_trans(trans_file)
+        self.dict_aligns = self.load_aligns(align_file)
+        self.list_uttids = list(self.dict_wavs.keys())
+        self.align_rate = self.get_alignRate() if align_file else None
 
         if _shuffle:
-            self.shuffle_utts()
+            shuffle(self.list_uttids)
 
-    def __getitem__(self,idx):
-        utterance = self.list_utterances[idx]
-        wav,seq_label,alignment = utterance.strip().split(',')
-        feat = audio2vector(wav,self.args.data.dim_raw_input,method=self.args.data.featType)
+    def __getitem__(self, id):
+        uttid = self.list_uttids[id]
+        wav = self.dict_wavs[uttid]
+
+        feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
         if self.transform:
-            feat = process_raw_feature(feat,self.args)
+            feat = process_raw_feature(feat, self.args)
 
-        seq_label = np.array(
-            [self.token2idx.get(word,self.token2idx['sil'])
-             for word in seq_label.split(' ')],
-            dtype=np.int32)
+        trans = self.dict_trans[uttid]
 
-        alignment = np.array([int(int(align)/self.align_rate) for align in alignment.split(' ')], dtype=np.int32)
+        try:
+            align = self.dict_aligns[uttid][::self.align_rate]
+            stamps = self.align2stamp(align)
+            # print('align rate:', np.round(len(align)/len(feat)))
+        except:
+            align = None
+            stamps = None
 
-        seq_label = self.get_full_align(seq_label,alignment,len(feat))
-
-        sample = {'id': wav, 'feature': feat, 'label': seq_label, 'align': alignment}
+        sample = {'uttid': uttid,
+                  'feature': feat,
+                  'trans': trans,
+                  'align': align,
+                  'stamps': stamps}
 
         return sample
 
-    def get_full_align(self,seq_label,align,len_feature=None):
-        time = -1
-        full_align = []
-        for label,now in zip(seq_label,align):
-            duration = now - time
-            full_align.extend([label]*duration)
-            time = now
-
-        if len_feature:
-            pad = abs(len_feature - len(full_align))
-            full_align.extend([label]*pad)
-            full_align = full_align[:len_feature]
-
-        return np.array(full_align,dtype=np.int32)
-
-    def get_dataset_ngram(self,n,k,savefile=None,split=5000):
+    def get_attrs(self, attr, uttids, length=None):
         """
-        Simply concatenate all sents into one will bring in noisy n-gram at end of each sent.
-        Here we count ngrams for each sent and sum them up.
+        length serves for the align attr to ensure the align's length same as feature
         """
-        from utils.dataProcess import get_N_gram
-        from nltk import FreqDist
+        list_res = []
+        list_len = []
+        for uttid in uttids:
+            if type(uttid) == bytes:
+                uttid = uttid.decode('utf-8')
+            if attr == 'wav':
+                wav = self.dict_wavs[uttid]
+                res = wav
+            elif attr == 'trans':
+                trans = self.dict_trans[uttid]
+                res = trans
+            elif attr == 'align':
+                try:
+                    _align = self.dict_aligns[uttid]
+                    align = _align[::self.align_rate]
+                    if len(_align) % 2 == 0:
+                        align = np.concatenate([align, [align[-1]]])
+                    stamps = self.align2stamp(align)
+                except:
+                    align = None
+                    stamps = None
+                res = align
+            elif attr == 'stamps':
+                try:
+                    align = self.dict_aligns[uttid][::self.align_rate]
+                    stamps = self.align2stamp(align)
+                except:
+                    stamps = None
+                res = stamps
+            else:
+                raise KeyError
+            list_res.append(res)
+            try:
+                list_len.append(len(res))
+            except:
+                pass
+        try:
+            max_len = max(list_len)
+            list_padded = []
+            for res in list_res:
+                list_padded.append(np.concatenate([res, [0]*(max_len-len(res))]))
+            list_res = np.array(list_padded, np.int32)
+        except:
+            pass
 
-        def iter_in_sent(sent):
-            for word in sent.split():
-                yield word
+        return list_res
 
-        print('analysing text ...')
+    def load_uttid2wav(self, uttid2wav):
+        dict_wavs = {}
+        with open(uttid2wav) as f:
+            for line in f:
+                uttid, wav = line.strip().split()
+                dict_wavs[uttid] = wav
 
-        ngrams_global = FreqDist()
-        for i in range(len(self.list_utterances)//split +1):
-            ngrams = FreqDist()
-            text = self.list_utterances[i*split: (i+1)*split]
-            for utt in tqdm(text):
-                _,seq_label,_ = utt.strip().split(',')
-                ngram = get_N_gram(iter_in_sent(seq_label), n)
-                ngrams += ngram
+        return dict_wavs
 
-            ngrams_global += dict(ngrams.most_common(2*k))
+    @staticmethod
+    def align2stamp(align):
+        if align is not None:
+            list_stamps = []
+            label_prev = align[0]
+            for i, label in enumerate(align):
+                if label_prev != label:
+                    list_stamps.append(i-1)
+                label_prev = label
+        else:
+            list_stamps = None
 
-        if savefile:
-            with open(savefile, 'w') as fw:
-                for ngram,num in ngrams_global.most_common(k):
-                    line = '{}:{}'.format(ngram,num)
-                    fw.write(line+'\n')
+        return np.array(list_stamps)
 
-        return ngrams_global
+    @staticmethod
+    def load_aligns(align_file):
+        dict_aligns = defaultdict(lambda: None)
+        if align_file:
+            with open(align_file) as f:
+                for line in f:
+                    uttid, align = line.strip().split(maxsplit=1)
+                    dict_aligns[uttid] = np.array([int(i) for i in align.split()])
+
+        return dict_aligns
+
+    def load_trans(self, trans_file):
+        dict_trans = defaultdict(lambda: None)
+        with open(trans_file) as f:
+            for line in f:
+                uttid, load_trans = line.strip().split(maxsplit=1)
+                dict_trans[uttid] = np.array([self.token2idx[i] for i in load_trans.split()])
+
+        return dict_trans
+
+    def __len__(self):
+        return len(self.list_uttids)
+
+    def get_alignRate(self):
+        uttid = self.list_uttids[0]
+
+        wav = self.dict_wavs[uttid]
+        feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+        if self.transform:
+            feat = process_raw_feature(feat, self.args)
+
+        align = self.dict_aligns[uttid]
+
+        return int(np.round(len(align)/len(feat)))
 
 
 class LMDataSet(DataSet):
@@ -238,7 +363,7 @@ def load_dataset(max_length, max_n_examples, max_vocab_size=2048, data_dir=''):
 
     np.random.shuffle(lines)
 
-    counts = collections.Counter(char for line in lines for char in line)
+    counts = Counter(char for line in lines for char in line)
 
     charmap = {'unk':0}
     inv_charmap = ['unk']

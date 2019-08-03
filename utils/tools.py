@@ -4,9 +4,15 @@ import editdistance as ed
 from pathlib import Path
 from tqdm import tqdm
 from random import shuffle
-import sys
+import hashlib
 
-from utils.dataProcess import get_N_gram
+
+def mkdirs(filename):
+    if not filename.parent.is_dir():
+        mkdirs(filename.parent)
+
+    if '.' not in str(filename):
+        filename.mkdir()
 
 
 class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -28,11 +34,10 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
 
 class TFData:
     """
-    test on TF2.0-alpha
+    test on TF2.0
     """
-    def __init__(self, dataset, dataAttr, dir_save, args, size_file=5000000, max_feat_len=3000):
+    def __init__(self, dataset, dir_save, args, size_file=5000000, max_feat_len=3000):
         self.dataset = dataset
-        self.dataAttr =  dataAttr # ['feature', 'label', 'align']
         self.max_feat_len = max_feat_len
         self.dir_save = dir_save
         self.args = args
@@ -44,27 +49,27 @@ class TFData:
         num_token = 0
         num_damaged_sample = 0
 
-        def serialize_example(feature, label, align):
+        def serialize_example(uttid, feature):
             atts = {
-                'feature': self._bytes_feature(feature.tostring()),
-                'label': self._bytes_feature(label.tostring()),
-                'align': self._bytes_feature(align.tostring()),
+                'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
+                'feature': self._bytes_feature(feature.tostring())
             }
             example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
 
             return example_proto.SerializeToString()
 
         def generator():
-            for features, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
-                # print(features['feature'].shape)
-                yield serialize_example(features['feature'], features['label'], features['align'])
+            for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+                yield serialize_example(sample['uttid'], sample['feature'])
 
         dataset_tf = tf.data.Dataset.from_generator(
             generator=generator,
             output_types=tf.string,
             output_shapes=())
 
-        writer = tf.data.experimental.TFRecordWriter(str(self.dir_save/'{}.recode'.format(name)))
+        record_file = self.dir_save/'{}.recode'.format(name)
+        mkdirs(record_file)
+        writer = tf.data.experimental.TFRecordWriter(str(record_file))
         writer.write(dataset_tf)
 
         with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
@@ -79,6 +84,7 @@ class TFData:
     def read(self, _shuffle=False):
         """
         the tensor could run unlimitatly
+        return a iter
         """
         list_filenames = self.fentch_filelist(self.dir_save)
         if _shuffle:
@@ -89,83 +95,22 @@ class TFData:
         raw_dataset = tf.data.TFRecordDataset(list_filenames)
 
         def _parse_function(example_proto):
-            features = tf.io.parse_single_example(
+            sample = tf.io.parse_single_example(
                 example_proto,
-                # features={attr: tf.io.FixedLenFeature([], tf.string) for attr in self.dataAttr}
                 features={
-                    'feature': tf.io.FixedLenFeature([], tf.string),
-                    'label': tf.io.FixedLenFeature([], tf.string),
-                    'align': tf.io.FixedLenFeature([], tf.string)
+                    'uttid': tf.io.FixedLenFeature([], tf.string),
+                    'feature': tf.io.FixedLenFeature([], tf.string)
                 }
             )
-            feature = tf.reshape(tf.io.decode_raw(features['feature'], tf.float32),
+            uttid = sample['uttid']
+            feature = tf.reshape(tf.io.decode_raw(sample['feature'], tf.float32),
                                  [-1, self.dim_feature])[:self.max_feat_len, :]
-            label = tf.io.decode_raw(features['label'], tf.int32)
-            align = tf.io.decode_raw(features['align'], tf.int32)
 
-            return feature, label, align
+            return uttid, feature
 
-        features = raw_dataset.map(_parse_function)
+        feature = raw_dataset.map(_parse_function)
 
-        return features
-
-    def get_bucket_size(self, idx_init, reuse=False):
-
-        f_len_hist = './dataset_len_hist.txt'
-        list_len = []
-
-        if not reuse:
-            dataset = self.read(_shuffle=False)
-            for sample in tqdm(dataset):
-                feature, *_ = sample
-                list_len.append(len(feature))
-
-            hist, edges = np.histogram(list_len, bins=(max(list_len)-min(list_len)+1))
-
-            # save hist
-            with open(f_len_hist, 'w') as fw:
-                for num, edge in zip(hist, edges):
-                    fw.write('{}: {}\n'.format(str(num), str(int(np.ceil(edge)))))
-                    print(str(num), str(int(np.ceil(edge))))
-
-            list_num = []
-            list_length = []
-            with open(f_len_hist) as f:
-                for line in f:
-                    num, length = line.strip().split(':')
-                    list_num.append(int(num))
-                    list_length.append(int(length))
-
-        def next_idx(idx, energy):
-            for i in range(idx, len(list_num), 1):
-                if list_length[i]*sum(list_num[idx+1:i+1]) > energy:
-                    return i-1
-            return
-
-        M = self.args.num_batch_tokens
-        b0 = int(M / list_length[idx_init])
-        k = b0/sum(list_num[:idx_init+1])
-        energy = M/k
-
-        list_batchsize = [b0]
-        list_boundary = [list_length[idx_init]]
-
-        idx = idx_init
-        while idx < len(list_num):
-            idx = next_idx(idx, energy)
-            if not idx:
-                break
-            if idx == idx_init:
-                print('enlarge the idx_init!')
-                sys.exit()
-            list_boundary.append(list_length[idx])
-            list_batchsize.append(int(M / list_length[idx]))
-
-        list_boundary.append(list_length[-1])
-        list_batchsize.append(int(M/list_length[-1]))
-
-        print('suggest boundaries: \n{}'.format(','.join(map(str, list_boundary))))
-        print('corresponding batch size: \n{}'.format(','.join(map(str, list_batchsize))))
+        return feature
 
     def __len__(self):
         return self.read_tfdata_info(self.dir_save)['size_dataset']
@@ -181,6 +126,11 @@ class TFData:
     def _bytes_feature(value):
         """Returns a bytes_list from a list of string / byte."""
         return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+    @staticmethod
+    def _int_feature(value):
+        """Returns a int_list."""
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
     @staticmethod
     def read_tfdata_info(dir_save):
@@ -217,17 +167,6 @@ def build_optimizer(args, lr=0.5, type='adam'):
     return optimizer
 
 
-def size_variables(model):
-    total_size = 0
-    all_weights = {v.name: v for v in model.trainable_variables}
-    for v_name in sorted(list(all_weights)):
-        v = all_weights[v_name]
-        v_size = int(np.prod(np.array(v.shape.as_list())))
-        print("Weight    %s\tshape    %s\tsize    %d" % (v.name[:-2].ljust(80), str(v.shape).ljust(20), v_size))
-        total_size += v_size
-    print("Total trainable variables size: %d" % total_size)
-
-
 def sampleFrames(align):
     """
     align:
@@ -239,6 +178,42 @@ def sampleFrames(align):
     sample = tf.cast((_align + (align-_align)*tf.random.uniform(align.shape))*tf.cast(align > 0, tf.float32), tf.int32)
 
     return sample
+
+
+def get_dataset_ngram(text_file, n, k, savefile=None, split=5000):
+    """
+    Simply concatenate all sents into one will bring in noisy n-gram at end of each sent.
+    Here we count ngrams for each sent and sum them up.
+    """
+    from utils.dataProcess import get_N_gram
+    from nltk import FreqDist
+
+    def iter_in_sent(sent):
+        for word in sent.split():
+            yield word
+
+    print('analysing text ...')
+
+    list_utterances = open(text_file).readlines()
+
+    ngrams_global = FreqDist()
+    for i in range(len(list_utterances)//split +1):
+        ngrams = FreqDist()
+        text = list_utterances[i*split: (i+1)*split]
+        for utt in tqdm(text):
+            _, seq_label, _ = utt.strip().split(',')
+            ngram = get_N_gram(iter_in_sent(seq_label), n)
+            ngrams += ngram
+
+        ngrams_global += dict(ngrams.most_common(2*k))
+
+    if savefile:
+        with open(savefile, 'w') as fw:
+            for ngram,num in ngrams_global.most_common(k):
+                line = '{}:{}'.format(ngram,num)
+                fw.write(line+'\n')
+
+    return ngrams_global
 
 
 def read_ngram(top_k, file, token2idx, type='list'):
@@ -287,7 +262,7 @@ def batch_cer(preds, reference):
     """
     batch_dist = 0
     batch_len = 0
-    for res, ref in zip(preds, reference.numpy()):
+    for res, ref in zip(preds, reference):
         length = np.sum(ref>0)
         res = align_shrink(res[:length])
         ref = align_shrink(ref[:length])
@@ -323,6 +298,8 @@ def get_preds_ngram(preds, len_preds, n):
     Simply concatenate all sents into one will bring in noisy n-gram at end of each sent.
     Here we count ngrams for each sent and sum them up.
     """
+    from utils.dataProcess import get_N_gram
+
     def iter_preds(preds, len_preds):
         for len, utt in zip(len_preds, preds):
             for token in utt[:len]:
@@ -377,27 +354,33 @@ def frames_constrain_loss(logits, align):
     return tf.reduce_sum(loss)
 
 
-def aligns2indices(aligns, sample='random'):
+def stamps2indices(stamps, sample='random'):
     """
     aligns:
     return please ignore the value in sample where in aligns is 0
     """
     if sample == 'random':
-        aligns = tf.cast(aligns, tf.float32)
-        _aligns = tf.pad(aligns, [[0, 0], [1, 0]])[:, :-1]
-        sampled_aligns = tf.cast((_aligns + (aligns-_aligns)*
-            tf.random.uniform(aligns.shape))*tf.cast(aligns > 0, tf.float32), tf.int32)
+        stamps = tf.cast(stamps, tf.float32)
+        _stamps = tf.pad(stamps, [[0, 0], [1, 0]])[:, :-1]
+        sampled_stamps = tf.cast((_stamps + (stamps-_stamps)*
+            tf.random.uniform(stamps.shape))*tf.cast(stamps > 0, tf.float32), tf.int32)
     elif sample == 'middle':
-        aligns = tf.cast(aligns, tf.float32)
-        _aligns = tf.pad(aligns, [[0, 0], [1, 0]])[:, :-1]
-        sampled_aligns = tf.cast((_aligns + (aligns-_aligns)*
-            0.5*tf.ones_like(aligns))*tf.cast(aligns > 0, tf.float32), tf.int32)
+        stamps = tf.cast(stamps, tf.float32)
+        _stamps = tf.pad(stamps, [[0, 0], [1, 0]])[:, :-1]
+        sampled_stamps = tf.cast((_stamps + (stamps-_stamps)*
+            0.5*tf.ones_like(stamps))*tf.cast(stamps > 0, tf.float32), tf.int32)
     elif sample == 'end':
-        sampled_aligns = aligns
-    batch_idx = tf.tile(tf.range(aligns.shape[0])[:, None], [1, aligns.shape[1]])
-    indices = tf.stack([batch_idx, sampled_aligns], -1)
+        sampled_stamps = stamps
+    batch_idx = tf.tile(tf.range(stamps.shape[0])[:, None], [1, stamps.shape[1]])
+    indices = tf.stack([batch_idx, sampled_stamps], -1)
 
     return indices
+
+
+def str_md5(string):
+    encryption = hashlib.md5()
+    encryption.update(string)
+    return encryption.hexdigest()
 
 
 def align_accuracy(P_output, labels):
@@ -449,23 +432,26 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     return loss
 
 
-def evaluation(tfdata_dev, dev_size, model):
+def evaluate(feature, dataset, dev_size, model):
     list_acc = []
 
     num_processed = 0
     total_cer_dist = 0
     total_cer_len = 0
-    for batch in tfdata_dev:
-        x, y, aligns = batch
+    for batch in feature:
+        uttids, x = batch
+        aligns = dataset.get_attrs('align', uttids.numpy())
+        trans = dataset.get_attrs('trans', uttids.numpy())
+        stamps = dataset.get_attrs('stamps', uttids.numpy())
         logits = model(x)
 
-        acc = align_accuracy(logits, y)
+        acc = align_accuracy(logits, aligns)
         list_acc.append(acc)
 
-        indices = aligns2indices(aligns, 'middle')
+        indices = stamps2indices(stamps, 'middle')
         _logits = tf.gather_nd(logits, indices)
         preds = get_predicts(_logits)
-        batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), y)
+        batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), trans)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
 
@@ -484,8 +470,8 @@ def monitor(sample, model):
     logits = model(x)
     predicts = get_predicts(logits)
     print('predicts: \n', predicts.numpy()[0])
-    print('label: \n', sample['label'])
     print('align: ', sample['align'])
+    print('trans: \n', sample['trans'])
 
 
 def decode(dataset, model, idx2token, save_file, log=False):
@@ -494,8 +480,8 @@ def decode(dataset, model, idx2token, save_file, log=False):
             x = np.array([sample['feature']], dtype=np.float32)
             logits = model(x)
             align = sample['align']
-            uttid = sample['id'].split('/')[-2] + '_' + sample['id'].split('/')[-1].split('.')[0]
-            indices = aligns2indices([align], 'middle')
+            uttid = sample['uttid']
+            indices = stamps2indices([align], 'middle')
             _logits = tf.gather_nd(logits, indices)
             predicts = get_predicts(_logits)[0]
             idx_prev = None
@@ -508,6 +494,7 @@ def decode(dataset, model, idx2token, save_file, log=False):
                 idx_prev = idx
             line = ' '.join(list_tokens)
             if log:
-                print('label: ', sample['label'])
                 print('predicts: ', list_tokens)
+                print('align: ', sample['align'])
+
             fw.write(uttid + ' ' + line + '\n')

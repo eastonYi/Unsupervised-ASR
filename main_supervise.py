@@ -6,11 +6,10 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 
-from eastonCode.tfTools.tfData import TFData
-
+from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluation, decode, monitor
+from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor
 
 from models.GAN import PhoneClassifier
 
@@ -19,27 +18,34 @@ ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
 
 def Train():
+    dataset_train = ASR_align_DataSet(
+        trans_file=args.dirs.train.trans,
+        align_file=args.dirs.train.align,
+        uttid2wav=args.dirs.train.wav_scp,
+        args=args,
+        _shuffle=True,
+        transform=True)
     dataset_dev = ASR_align_DataSet(
-        file=[args.dirs.dev.data],
+        trans_file=args.dirs.dev.trans,
+        align_file=args.dirs.dev.align,
+        uttid2wav=args.dirs.dev.wav_scp,
         args=args,
         _shuffle=False,
         transform=True)
     with tf.device("/cpu:0"):
         # wav data
-        tfdata_train = TFData(dataset=None,
-                        dataAttr=['feature', 'label', 'align'],
+        feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
-                        args=args).read(_shuffle=False)
-        tfdata_dev = TFData(dataset=None,
-                        dataAttr=['feature', 'label', 'align'],
+                        args=args).read()
+        feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
-                        args=args).read(_shuffle=False)
+                        args=args).read()
         if args.num_supervised:
-            x_0, y_0, aligns_0 = next(iter(tfdata_train.take(args.num_supervised).\
+            x_0, y_0, aligns_0 = next(iter(feature_train.take(args.num_supervised).\
                 padded_batch(args.num_supervised, ([None, args.dim_input], [None], [None]))))
-        iter_train = iter(tfdata_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
-                ([None, args.dim_input], [None], [None])).prefetch(buffer_size=5))
-        tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
+        iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
+                ((), [None, args.dim_input])).prefetch(buffer_size=5))
+        feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
     # create model paremeters
     model = PhoneClassifier(args)
@@ -67,8 +73,10 @@ def Train():
             x = x_0
             loss_supervise = train_G_supervised(x_0, y_0, model, optimizer_G, args.dim_output)
         else:
-            x, y, aligns = next(iter_train)
-            loss_supervise = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
+            uttids, x = next(iter_feature_train)
+            aligns = dataset_train.get_attrs('align', uttids.numpy())
+            # trans = dataset_train.get_attrs('trans', uttids.numpy())
+            loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
 
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
@@ -76,7 +84,7 @@ def Train():
             with writer.as_default():
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
-            fer, cer = evaluation(tfdata_dev, args.data.dev_size, model)
+            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
