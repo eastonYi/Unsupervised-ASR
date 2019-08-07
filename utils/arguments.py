@@ -58,6 +58,9 @@ try:
     args.dirs.dev.tfdata = Path(args.dirs.dev.tfdata)
     if not args.dirs.train.tfdata.is_dir(): args.dirs.train.tfdata.mkdir()
     if not args.dirs.dev.tfdata.is_dir(): args.dirs.dev.tfdata.mkdir()
+    args.dirs.train.feat_len = args.dirs.train.tfdata/'feature_length.txt'
+    args.dirs.dev.feat_len = args.dirs.dev.tfdata/'feature_length.txt'
+
 except:
     print("have not converted to tfdata yet: ")
 

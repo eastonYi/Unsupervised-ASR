@@ -7,60 +7,73 @@ import tensorflow as tf
 
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
-from utils.tools import TFData, gradient_penalty, frames_constrain_loss, aligns2indices,\
-    CE_loss, evaluation, monitor, decode
+from utils.tools import TFData, gradient_penalty, frames_constrain_loss, stamps2indices,\
+    CE_loss, evaluate, monitor, decode
 
-from models.GAN import PhoneClassifier, PhoneDiscriminator2, PhoneDiscriminator3
-
+from models.GAN import PhoneClassifier, PhoneDiscriminator3
 
 tf.random.set_seed(args.seed)
 
 def train():
-    dataset_dev = ASR_align_DataSet(
-        file=[args.dirs.dev.data],
-        args=args,
-        _shuffle=False,
-        transform=True)
     with tf.device("/cpu:0"):
-        # wav data
-        tfdata_train = TFData(dataset=None,
-                        dataAttr=['feature', 'label', 'align'],
-                        dir_save=args.dirs.train.tfdata,
-                        args=args).read(_shuffle=False)
-        tfdata_dev = TFData(dataset=None,
-                        dataAttr=['feature', 'label', 'align'],
-                        dir_save=args.dirs.dev.tfdata,
-                        args=args).read(_shuffle=False)
-
-        x_0, y_0, _ = next(iter(tfdata_train.take(args.num_supervised).map(lambda x, y, z: (x, y, z[:args.max_seq_len])).\
-            padded_batch(args.num_supervised, ([None, args.dim_input], [None], [None]))))
-        iter_train = iter(tfdata_train.cache().repeat().shuffle(3000).map(lambda x, y, z: (x, y, z[:args.max_seq_len])).\
-            padded_batch(args.batch_size, ([None, args.dim_input], [None], [args.max_seq_len])).prefetch(buffer_size=3))
-        tfdata_dev = tfdata_dev.padded_batch(args.batch_size, ([None, args.dim_input], [None], [None]))
-
-        # text data
-        dataset_text = TextDataSet(
-            list_files=[args.dirs.lm.data],
+        dataset_train = ASR_align_DataSet(
+            trans_file=args.dirs.train.trans,
+            align_file=args.dirs.train.align,
+            uttid2wav=args.dirs.train.wav_scp,
+            feat_len_file=args.dirs.train.feat_len,
             args=args,
-            _shuffle=True)
+            _shuffle=True,
+            transform=True)
+        dataset_dev = ASR_align_DataSet(
+            trans_file=args.dirs.dev.trans,
+            align_file=args.dirs.dev.align,
+            uttid2wav=args.dirs.dev.wav_scp,
+            feat_len_file=args.dirs.dev.feat_len,
+            args=args,
+            _shuffle=False,
+            transform=True)
+        dataset_train_supervise = ASR_align_DataSet(
+            trans_file=args.dirs.train_supervise.trans,
+            align_file=args.dirs.train_supervise.align,
+            uttid2wav=args.dirs.train.wav_scp,
+            feat_len_file=args.dirs.train.feat_len,
+            args=args,
+            _shuffle=False,
+            transform=True)
+        feature_train = TFData(dataset=dataset_train,
+                        dir_save=args.dirs.train.tfdata,
+                        args=args).read()
+        feature_dev = TFData(dataset=dataset_dev,
+                        dir_save=args.dirs.dev.tfdata,
+                        args=args).read()
+        supervise_uttids, supervise_x = next(iter(feature_train.take(args.num_supervised).\
+            padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
+        supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
 
-        tfdata_train_text = tf.data.Dataset.from_generator(
+        iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
+                ((), [None, args.dim_input])).prefetch(buffer_size=5))
+        feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
+
+        dataset_text = TextDataSet(list_files=[args.dirs.lm.data],
+                                   args=args, _shuffle=True)
+        tfdata_train = tf.data.Dataset.from_generator(
             dataset_text, (tf.int32), (tf.TensorShape([None])))
-        iter_text = iter(tfdata_train_text.cache().repeat().shuffle(100).map(lambda x: x[:args.max_seq_len]).padded_batch(args.batch_size,
-            ([args.max_seq_len])).prefetch(buffer_size=5))
+        iter_text = iter(tfdata_train.cache().repeat().shuffle(1000).map(
+            lambda x: x[:args.max_seq_len]).padded_batch(args.batch_size, ([args.max_seq_len])).prefetch(buffer_size=5))
+
 
     # create model paremeters
     G = PhoneClassifier(args)
     D = PhoneDiscriminator3(args)
     G.summary()
     D.summary()
+
     optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
     optimizer_D = tf.keras.optimizers.Adam(args.opti.D.lr, beta_1=0.5, beta_2=0.9)
-    optimizer = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
-    ckpt = tf.train.Checkpoint(G=G, optimizer_G = optimizer_G)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=5)
+    ckpt = tf.train.Checkpoint(G=G, optimizer_G=optimizer_G)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     step = 0
 
     # if a checkpoint exists, restore the latest checkpoint.
@@ -78,16 +91,20 @@ def train():
         start = time()
 
         for _ in range(args.opti.D_G_rate):
-            x, _, aligns = next(iter_train)
+            uttids, x = next(iter_feature_train)
+            stamps = dataset_train.get_attrs('stamps', uttids.numpy())
             text = next(iter_text)
             P_Real = tf.one_hot(text, args.dim_output)
-            cost_D, gp = train_D(x, aligns, P_Real, text>0, G, D, optimizer_D, args.lambda_gp)
+            cost_D, gp = train_D(x, stamps[:, :args.max_seq_len], P_Real, text>0, G, D, optimizer_D, args.lambda_gp)
 
-        x, _, aligns = next(iter_train)
-        cost_G, fs = train_G(x, aligns, G, D, optimizer_G, args.lambda_fs)
-        loss_supervise = train_G_supervised(x_0, y_0, G, optimizer_G, args.dim_output)
+        uttids, x = next(iter_feature_train)
+        stamps = dataset_train.get_attrs('stamps', uttids.numpy())
+        cost_G, fs = train_G(x, stamps, G, D, optimizer_G, args.lambda_fs)
+        # loss_supervise = 0
+        loss_supervise = train_G_supervised(supervise_x, supervise_aligns, G, optimizer_G, args.dim_output, args.lambda_supervision)
 
         num_processed += len(x)
+        progress = num_processed / args.data.train_size
         if step % 10 == 0:
             print('cost_G: {:.3f}|{:.3f}\tcost_D: {:.3f}|{:.3f}\tloss_supervise: {:.3f}\tbatch: {}|{}\tused: {:.3f}\t {:.3f}% iter: {}'.format(
                    cost_G, fs, cost_D, gp, loss_supervise, x.shape, text.shape, time()-start, progress*100.0, step))
@@ -98,7 +115,7 @@ def train():
                 tf.summary.scalar("costs/fs", fs, step=step)
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
-            fer, cer = evaluation(tfdata_dev, args.data.dev_size, G)
+            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
@@ -113,8 +130,8 @@ def train():
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
 
 
-def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
-    indices = aligns2indices(aligns)
+def train_G(x, stamps, G, D, optimizer_G, lambda_fs):
+    indices = stamps2indices(stamps)
     params_G = G.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_G:
         tape_G.watch(params_G)
@@ -126,7 +143,7 @@ def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
 
         gen_cost = -tf.reduce_mean(disc_fake)
         # gen_cost = tf.reduce_mean(tf.math.squared_difference(disc_fake, 1))
-        fs = frames_constrain_loss(logits, aligns)
+        fs = frames_constrain_loss(logits, stamps)
         # fs = 0
         gen_cost += lambda_fs * fs
 
@@ -136,8 +153,8 @@ def train_G(x, aligns, G, D, optimizer_G, lambda_fs):
     return gen_cost, fs
 
 
-def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
-    indices = aligns2indices(aligns)
+def train_D(x, stamps, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
+    indices = stamps2indices(stamps)
     params_D = D.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_D:
         tape_D.watch(params_D)
@@ -160,18 +177,53 @@ def train_D(x, aligns, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
 
     return disc_cost, gp
 
+def Decode(save_file):
+    dataset = ASR_align_DataSet(
+        trans_file=args.dirs.train.trans,
+        align_file=None,
+        uttid2wav=args.dirs.train.wav_scp,
+        feat_len_file=args.dirs.train.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
+    dataset_dev = ASR_align_DataSet(
+        trans_file=args.dirs.dev.trans,
+        align_file=args.dirs.dev.align,
+        uttid2wav=args.dirs.dev.wav_scp,
+        feat_len_file=args.dirs.dev.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
 
-@tf.function
-def train_G_supervised(x, labels, G, optimizer_G, dim_output):
+    feature_dev = TFData(dataset=dataset_dev,
+                    dir_save=args.dirs.dev.tfdata,
+                    args=args).read()
+    feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
+
+    model = PhoneClassifier(args)
+    model.summary()
+
+    optimizer_G = tf.keras.optimizers.Adam(1e-4)
+    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
+
+    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(_ckpt_manager.latest_checkpoint)
+    print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+    decode(dataset, model, args.idx2token, 'output/'+save_file)
+
+
+# @tf.function
+def train_G_supervised(x, aligns, G, optimizer, dim_output, lambda_supervision):
     with tf.GradientTape() as tape_G:
         logits = G(x, training=True)
-        ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
-        gen_loss = ce_loss
+        ce_loss = CE_loss(logits, aligns, dim_output, confidence=0.9)
+        loss = ce_loss * lambda_supervision
 
-    gradients_G = tape_G.gradient(gen_loss, G.trainable_variables)
-    optimizer_G.apply_gradients(zip(gradients_G, G.trainable_variables))
+    gradients_G = tape_G.gradient(loss, G.trainable_variables)
+    optimizer.apply_gradients(zip(gradients_G, G.trainable_variables))
 
-    return gen_loss
+    return ce_loss
 
 
 if __name__ == '__main__':
@@ -186,26 +238,33 @@ if __name__ == '__main__':
     param = parser.parse_args()
 
     print('CUDA_VISIBLE_DEVICES: ', param.gpu)
+    os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    assert len(gpus) > 0, "Not enough GPU hardware devices available"
+    [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
 
     if param.name:
         args.dir_exps = args.dir_exps /  param.name
         args.dir_log = args.dir_exps / 'log'
         args.dir_checkpoint = args.dir_exps / 'checkpoint'
-        if args.dir_exps.is_dir():
-            os.system('rm -r '+ str(args.dir_exps))
-        args.dir_exps.mkdir()
-        args.dir_log.mkdir()
-        args.dir_checkpoint.mkdir()
+        if not args.dir_exps.is_dir(): args.dir_exps.mkdir()
+        if not args.dir_log.is_dir(): args.dir_log.mkdir()
+        if not args.dir_checkpoint.is_dir(): args.dir_checkpoint.mkdir()
         with open(args.dir_exps / 'configs.txt', 'w') as fw:
             print(args, file=fw)
 
     if param.mode == 'train':
-        os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
-        gpus = tf.config.experimental.list_physical_devices('GPU')
-        assert len(gpus) > 0, "Not enough GPU hardware devices available"
-        [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
         print('enter the TRAINING phrase')
         train()
+
+    elif param.mode == 'decode':
+        """
+        python main_supervise.py -m decode --name timit_supervised2_decode.txt --gpu 0 -c configs/timit_supervised2.yaml
+        """
+        print('enter the DECODING phrase')
+        assert args.dirs.checkpoint
+        assert param.name
+        Decode(param.name)
 
 
         # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml

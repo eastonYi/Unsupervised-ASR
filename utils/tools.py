@@ -45,10 +45,10 @@ class TFData:
         self.dim_feature = dataset[0]['feature'].shape[-1] \
             if dataset else self.read_tfdata_info(dir_save)['dim_feature']
 
-    def save(self, name):
+    def save(self, name, length_file='feature_length.txt'):
         num_token = 0
         num_damaged_sample = 0
-
+        fw = open(self.dir_save/length_file, 'w')
         def serialize_example(uttid, feature):
             atts = {
                 'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
@@ -59,7 +59,10 @@ class TFData:
             return example_proto.SerializeToString()
 
         def generator():
+            nonlocal fw
             for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+                line = sample['uttid'] + ' ' + str(len(sample['feature']))
+                fw.write(line + '\n')
                 yield serialize_example(sample['uttid'], sample['feature'])
 
         dataset_tf = tf.data.Dataset.from_generator(
@@ -354,6 +357,21 @@ def frames_constrain_loss(logits, align):
     return tf.reduce_sum(loss)
 
 
+def align2stamp(align):
+    if align is not None:
+        list_stamps = []
+        label_prev = align[0]
+        for i, label in enumerate(align):
+            if label_prev != label:
+                list_stamps.append(i-1)
+            label_prev = label
+        list_stamps.append(i)
+    else:
+        list_stamps = None
+
+    return np.array(list_stamps)
+
+
 def stamps2indices(stamps, sample='random'):
     """
     aligns:
@@ -470,31 +488,30 @@ def monitor(sample, model):
     logits = model(x)
     predicts = get_predicts(logits)
     print('predicts: \n', predicts.numpy()[0])
-    print('align: ', sample['align'])
+    print('align: \n', sample['align'])
     print('trans: \n', sample['trans'])
 
 
 def decode(dataset, model, idx2token, save_file, log=False):
+    """
+    decode without stamps
+    decode align and shrink it to trans
+    """
     with open(save_file, 'w') as fw:
         for sample in tqdm(dataset):
+            uttid = sample['uttid']
             x = np.array([sample['feature']], dtype=np.float32)
             logits = model(x)
-            align = sample['align']
-            uttid = sample['uttid']
-            indices = stamps2indices([align], 'middle')
-            _logits = tf.gather_nd(logits, indices)
-            predicts = get_predicts(_logits)[0]
-            idx_prev = None
+            _align = get_predicts(logits)[0].numpy()
             list_tokens = []
-            for idx in predicts:
-                idx = idx.numpy()
-                if idx_prev == idx:
+            token_prev = None
+            for token in _align:
+                if token_prev == token:
                     continue
-                list_tokens.append(idx2token[idx])
-                idx_prev = idx
-            line = ' '.join(list_tokens)
+                list_tokens.append(token)
+                token_prev = token
+            line = ' '.join(idx2token[token] for token in list_tokens)
             if log:
-                print('predicts: ', list_tokens)
-                print('align: ', sample['align'])
-
+                print('predicted align: ', _align)
+                print('predicted trans: ', line)
             fw.write(uttid + ' ' + line + '\n')

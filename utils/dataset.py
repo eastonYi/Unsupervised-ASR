@@ -10,8 +10,8 @@ import multiprocessing
 import tensorflow as tf
 
 from .dataProcess import audio2vector, get_audio_length, process_raw_feature
+from .tools import align2stamp
 from eastonCode.dataProcessing.dataHelper import DataSet, SimpleDataLoader
-# from utils.dataProcess import get_alignRate
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
 
@@ -36,55 +36,6 @@ class ASRDataSet(DataSet):
         return len(self.list_utterances)
 
 
-# class ASR_align_DataSet(ASRDataSet):
-#     """
-#     for dataset with alignment,i.e. TIMIT
-#     csv: path/to/wav.wav,a b c d e,1000 2000 3000
-#     """
-#     def __init__(self, file, args, _shuffle, transform):
-#         super().__init__(file, args, _shuffle, transform)
-#         self.list_utterances = self.gen_utter_list(file)
-#         self.align_rate = get_alignRate(self.list_utterances[0].split(',')[0], self.args)
-#
-#         if _shuffle:
-#             self.shuffle_utts()
-#
-#     def __getitem__(self,idx):
-#         utterance = self.list_utterances[idx]
-#         wav, seq_label, stamps = utterance.strip().split(',')
-#         feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
-#         if self.transform:
-#             feat = process_raw_feature(feat, self.args)
-#
-#         seq_label = np.array(
-#             [self.token2idx.get(word, self.token2idx['sil'])
-#              for word in seq_label.split(' ')],
-#             dtype=np.int32)
-#
-#         stamps = np.array([int(int(stamp)/self.align_rate) for stamp in stamps.split(' ')], dtype=np.int32)
-#
-#         align = self.get_align(seq_label, stamps, len(feat))
-#
-#         sample = {'id': wav, 'feature': feat, 'align': align, 'stamps': stamps}
-#
-#         return sample
-#
-#     def get_align(self, seq_label, align, len_feature=None):
-#         time = -1
-#         align = []
-#         for label, now in zip(seq_label, align):
-#             duration = now - time
-#             align.extend([label]*duration)
-#             time = now
-#
-#         if len_feature:
-#             pad = abs(len_feature - len(align))
-#             align.extend([label]*pad)
-#             align = align[:len_feature]
-#
-#         return np.array(align, dtype=np.int32)
-
-
 class ASR_align_DataSet(ASRDataSet):
     """
     for dataset with alignment, i.e. TIMIT
@@ -100,13 +51,12 @@ class ASR_align_DataSet(ASRDataSet):
             phone
         -
     """
-    def __init__(self, trans_file, align_file, uttid2wav, args, _shuffle, transform):
+    def __init__(self, trans_file, align_file, uttid2wav, feat_len_file, args, _shuffle, transform):
         super().__init__(align_file, args, _shuffle, transform)
         self.dict_wavs = self.load_uttid2wav(uttid2wav)
-        self.dict_trans = self.load_trans(trans_file)
-        self.dict_aligns = self.load_aligns(align_file)
         self.list_uttids = list(self.dict_wavs.keys())
-        self.align_rate = self.get_alignRate() if align_file else None
+        self.dict_trans = self.load_trans(trans_file)
+        self.dict_aligns = self.load_aligns(align_file, feat_len_file) if align_file else None
 
         if _shuffle:
             shuffle(self.list_uttids)
@@ -122,8 +72,8 @@ class ASR_align_DataSet(ASRDataSet):
         trans = self.dict_trans[uttid]
 
         try:
-            align = self.dict_aligns[uttid][::self.align_rate]
-            stamps = self.align2stamp(align)
+            align = self.dict_aligns[uttid]
+            stamps = align2stamp(align)
             # print('align rate:', np.round(len(align)/len(feat)))
         except:
             align = None
@@ -137,7 +87,7 @@ class ASR_align_DataSet(ASRDataSet):
 
         return sample
 
-    def get_attrs(self, attr, uttids, length=None):
+    def get_attrs(self, attr, uttids):
         """
         length serves for the align attr to ensure the align's length same as feature
         """
@@ -149,42 +99,33 @@ class ASR_align_DataSet(ASRDataSet):
             if attr == 'wav':
                 wav = self.dict_wavs[uttid]
                 res = wav
+            elif attr == 'feature':
+                wav = self.dict_wavs[uttid]
+                feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+                if self.transform:
+                    feat = process_raw_feature(feat, self.args)
+                res = feat
             elif attr == 'trans':
                 trans = self.dict_trans[uttid]
                 res = trans
             elif attr == 'align':
-                try:
-                    _align = self.dict_aligns[uttid]
-                    align = _align[::self.align_rate]
-                    if len(_align) % 2 == 0:
-                        align = np.concatenate([align, [align[-1]]])
-                    stamps = self.align2stamp(align)
-                except:
-                    align = None
-                    stamps = None
+                align = self.dict_aligns[uttid]
                 res = align
             elif attr == 'stamps':
-                try:
-                    align = self.dict_aligns[uttid][::self.align_rate]
-                    stamps = self.align2stamp(align)
-                except:
-                    stamps = None
+                align = self.dict_aligns[uttid]
+                stamps = align2stamp(align)
                 res = stamps
             else:
                 raise KeyError
             list_res.append(res)
-            try:
-                list_len.append(len(res))
-            except:
-                pass
-        try:
+            list_len.append(len(res))
+
+        if attr in ('trans', 'align', 'stamps'):
             max_len = max(list_len)
             list_padded = []
             for res in list_res:
                 list_padded.append(np.concatenate([res, [0]*(max_len-len(res))]))
             list_res = np.array(list_padded, np.int32)
-        except:
-            pass
 
         return list_res
 
@@ -197,30 +138,25 @@ class ASR_align_DataSet(ASRDataSet):
 
         return dict_wavs
 
-    @staticmethod
-    def align2stamp(align):
-        if align is not None:
-            list_stamps = []
-            label_prev = align[0]
-            for i, label in enumerate(align):
-                if label_prev != label:
-                    list_stamps.append(i-1)
-                label_prev = label
-        else:
-            list_stamps = None
+    def load_aligns(self, align_file, feat_len_file):
+        dict_aligns = defaultdict(lambda: np.array([0]))
+        dict_feat_len = {}
 
-        return np.array(list_stamps)
+        with open(feat_len_file) as f:
+            for line in f:
+                uttid, len_feature = line.strip().split()
+                dict_feat_len[uttid] = int(len_feature)
+        align_rate = self.get_alignRate(align_file)
 
-    @staticmethod
-    def load_aligns(align_file):
-        dict_aligns = defaultdict(lambda: None)
-        if align_file:
-            with open(align_file) as f:
-                for line in f:
-                    uttid, align = line.strip().split(maxsplit=1)
-                    dict_aligns[uttid] = np.array([int(i) for i in align.split()])
+        with open(align_file) as f:
+            for line in f:
+                uttid, align = line.strip().split(maxsplit=1)
+                len_feat = dict_feat_len[uttid]
+                align = [int(i) for i in align.split()] + [1]
+                dict_aligns[uttid] = np.array(align[::align_rate][:len_feat])
 
         return dict_aligns
+
 
     def load_trans(self, trans_file):
         dict_trans = defaultdict(lambda: None)
@@ -234,15 +170,16 @@ class ASR_align_DataSet(ASRDataSet):
     def __len__(self):
         return len(self.list_uttids)
 
-    def get_alignRate(self):
-        uttid = self.list_uttids[0]
+    def get_alignRate(self, align_file):
+        with open(align_file) as f:
+            uttid, align = f.readline().strip().split(maxsplit=1)
 
         wav = self.dict_wavs[uttid]
         feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
         if self.transform:
             feat = process_raw_feature(feat, self.args)
 
-        align = self.dict_aligns[uttid]
+        align = align.split()
 
         return int(np.round(len(align)/len(feat)))
 

@@ -2,7 +2,7 @@ dirs:
     train:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
         # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/iter1_ali/train.phone.frame
+        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/iter2_ali/train.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_5_1_3
     train_supervise:
@@ -19,7 +19,7 @@ dirs:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
-    ngram: /data/sxu/easton/data/TIMIT/all.5gram
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_GAN/250_init/checkpoint
 
 data:
     featType: fbank
@@ -28,27 +28,22 @@ data:
     downsample: 1
     add_delta: True
     unit: phone
-    ngram: 5
-    top_k: 1000
-    k: 1000
 
 model:
     G:
         structure: fc
         num_hidden: 512
         num_layers: 1
+
 opti:
     type: adam
     lr: 0.0004
 
-dev_step: 200
+dev_step: 100
 decode_step: 200
-save_step: 200
+save_step: 100
 
 gpus: '0'
 # gpus: '1,2,3'
 batch_size: 1000
 num_supervised: 250
-
-lambda_fs: 0.00002
-lambda_supervision: 3.0

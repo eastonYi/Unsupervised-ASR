@@ -22,6 +22,7 @@ def Train():
         trans_file=args.dirs.train.trans,
         align_file=args.dirs.train.align,
         uttid2wav=args.dirs.train.wav_scp,
+        feat_len_file=args.dirs.train.feat_len,
         args=args,
         _shuffle=True,
         transform=True)
@@ -29,6 +30,7 @@ def Train():
         trans_file=args.dirs.dev.trans,
         align_file=args.dirs.dev.align,
         uttid2wav=args.dirs.dev.wav_scp,
+        feat_len_file=args.dirs.dev.feat_len,
         args=args,
         _shuffle=False,
         transform=True)
@@ -41,8 +43,18 @@ def Train():
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read()
         if args.num_supervised:
-            x_0, y_0, aligns_0 = next(iter(feature_train.take(args.num_supervised).\
-                padded_batch(args.num_supervised, ([None, args.dim_input], [None], [None]))))
+            dataset_train_supervise = ASR_align_DataSet(
+                trans_file=args.dirs.train_supervise.trans,
+                align_file=args.dirs.train_supervise.align,
+                uttid2wav=args.dirs.train.wav_scp,
+                feat_len_file=args.dirs.train.feat_len,
+                args=args,
+                _shuffle=False,
+                transform=True)
+            supervise_uttids, supervise_x = next(iter(feature_train.take(args.num_supervised).\
+                padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
+            supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
+
         iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
                 ((), [None, args.dim_input])).prefetch(buffer_size=5))
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
@@ -70,8 +82,8 @@ def Train():
         start = time()
 
         if args.num_supervised:
-            x = x_0
-            loss_supervise = train_G_supervised(x_0, y_0, model, optimizer_G, args.dim_output)
+            x = supervise_x
+            loss_supervise = train_G_supervised(supervise_x, supervise_aligns, model, optimizer_G, args.dim_output)
         else:
             uttids, x = next(iter_feature_train)
             aligns = dataset_train.get_attrs('align', uttids.numpy())
@@ -81,13 +93,13 @@ def Train():
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
                    loss_supervise, x.shape, time()-start, step))
-            with writer.as_default():
-                tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
+            # with writer.as_default():
+            #     tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
             fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-            with writer.as_default():
-                tf.summary.scalar("performance/fer", fer, step=step)
-                tf.summary.scalar("performance/cer", cer, step=step)
+            # with writer.as_default():
+            #     tf.summary.scalar("performance/fer", fer, step=step)
+            #     tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
             monitor(dataset_dev[0], model)
         if step % args.save_step == 0:
@@ -101,20 +113,18 @@ def Train():
 
 def Decode(save_file):
     dataset = ASR_align_DataSet(
-        file=[args.dirs.train.data],
+        trans_file=args.dirs.train.trans,
+        align_file=None,
+        uttid2wav=args.dirs.train.wav_scp,
+        feat_len_file=args.dirs.train.feat_len,
         args=args,
         _shuffle=False,
         transform=True)
-    # dataset = ASR_align_DataSet(
-    #     file=[args.dirs.dev.data],
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
 
     model = PhoneClassifier(args)
     model.summary()
 
-    optimizer_G = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
+    optimizer_G = tf.keras.optimizers.Adam(1e-4)
     ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
 
     _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
@@ -127,6 +137,7 @@ def Decode(save_file):
 def train_G_supervised(x, labels, model, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
         logits = model(x, training=True)
+        labels = tf.pad(labels, [[0, 0], [0, logits.shape[1]-labels.shape[1]]])
         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
         gen_loss = ce_loss
 
@@ -161,13 +172,9 @@ if __name__ == '__main__':
             args.dir_exps = args.dir_exps / param.name
             args.dir_log = args.dir_exps / 'log'
             args.dir_checkpoint = args.dir_exps / 'checkpoint'
-            if args.dir_exps.is_dir():
-                os.system('rm -r '+ str(args.dir_exps))
-            args.dir_exps.mkdir()
-            args.dir_log.mkdir()
-            args.dir_checkpoint.mkdir()
-            with open(args.dir_exps / 'configs.txt', 'w') as fw:
-                print(args, file=fw)
+            if not args.dir_exps.is_dir(): args.dir_exps.mkdir()
+            if not args.dir_log.is_dir(): args.dir_log.mkdir()
+            if not args.dir_checkpoint.is_dir(): args.dir_checkpoint.mkdir()
         print('enter the TRAINING phrase')
         Train()
 
