@@ -153,6 +153,7 @@ class ASR_align_DataSet(ASRDataSet):
                 uttid, align = line.strip().split(maxsplit=1)
                 len_feat = dict_feat_len[uttid]
                 align = [int(i) for i in align.split()] + [1]
+                # assert len(align) == len_feat + 1
                 dict_aligns[uttid] = np.array(align[::align_rate][:len_feat])
 
         return dict_aligns

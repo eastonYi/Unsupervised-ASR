@@ -11,6 +11,7 @@ from utils.tools import TFData, gradient_penalty, frames_constrain_loss, stamps2
     CE_loss, evaluate, monitor, decode
 
 from models.GAN import PhoneClassifier, PhoneDiscriminator3
+# from models.GAN import PhoneClassifier2 as PhoneClassifier
 
 tf.random.set_seed(args.seed)
 
@@ -177,6 +178,7 @@ def train_D(x, stamps, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
 
     return disc_cost, gp
 
+
 def Decode(save_file):
     dataset = ASR_align_DataSet(
         trans_file=args.dirs.train.trans,
@@ -200,17 +202,16 @@ def Decode(save_file):
                     args=args).read()
     feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
-    model = PhoneClassifier(args)
-    model.summary()
+    G = PhoneClassifier(args)
+    G.summary()
 
     optimizer_G = tf.keras.optimizers.Adam(1e-4)
-    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
-
-    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
-    ckpt.restore(_ckpt_manager.latest_checkpoint)
-    print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-    decode(dataset, model, args.idx2token, 'output/'+save_file)
+    ckpt = tf.train.Checkpoint(G=G, optimizer_G=optimizer_G)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(ckpt_manager.latest_checkpoint)
+    print ('checkpoint {} restored!!'.format(ckpt_manager.latest_checkpoint))
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
+    decode(dataset, G, args.idx2token, 'output/'+save_file)
 
 
 # @tf.function

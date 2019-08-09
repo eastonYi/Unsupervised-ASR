@@ -1,20 +1,19 @@
 dirs:
     train:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
-        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/iter2_ali/train.phone.frame
-        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_5_1_3
-    train_supervise:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_5_1_3
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
+    train_supervise:
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
+        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
+        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats
     dev:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats_13_5_1_3
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats
     test:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
     type: csv
@@ -22,7 +21,7 @@ dirs:
     # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_GAN/250_init/checkpoint
 
 data:
-    featType: fbank
+    featType: mfcc
     dim_raw_input: 13
     num_context: 5
     downsample: 1
@@ -31,7 +30,7 @@ data:
 
 model:
     G:
-        structure: fc
+        structure: lstm
         num_hidden: 512
         num_layers: 1
 
@@ -39,11 +38,10 @@ opti:
     type: adam
     lr: 0.0004
 
-dev_step: 100
+dev_step: 200
 decode_step: 200
 save_step: 100
 
 gpus: '0'
-# gpus: '1,2,3'
-batch_size: 1000
-num_supervised: 250
+batch_size: 500
+num_supervised:

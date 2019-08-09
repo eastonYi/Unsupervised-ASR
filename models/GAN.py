@@ -43,6 +43,28 @@ def PhoneClassifier(args):
     return model
 
 
+def PhoneClassifier2(args):
+    input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+                                        name='generator_input_x')
+    x_1 = input_x
+    for _ in range(args.model.G.num_layers):
+        x_1 = Dense(args.model.G.num_hidden, activation='relu')(x_1)
+
+    x_2 = x_1
+    for _ in range(args.model.G.num_layers):
+        x_2 = LSTM(64, return_sequences=True, dropout=0.1)(x_2)
+        x_2 = tf.keras.layers.ReLU()(x_2)
+
+    x = tf.concat([x_1, x_2], -1)
+    logits = Dense(args.dim_output, activation='linear')(x)
+
+    model = tf.keras.Model(inputs=input_x,
+                           outputs=logits,
+                           name='sequence_generator')
+
+    return model
+
+
 def PhoneDiscriminator(args):
     dim_hidden = args.model.D.num_hidden
 

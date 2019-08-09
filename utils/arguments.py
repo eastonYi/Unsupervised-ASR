@@ -5,7 +5,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
 
 from .dataProcess import load_vocab
-from eastonCode.tfTools.tfData import TFData
+from .tools import TFData, mkdirs
 
 
 class AttrDict(dict):
@@ -48,22 +48,20 @@ if not args.dir_checkpoint.is_dir(): args.dir_checkpoint.mkdir()
 args.token2idx, args.idx2token = load_vocab(args.dirs.vocab)
 args.dim_output = len(args.token2idx)
 
+args.dirs.train.tfdata = Path(args.dirs.train.tfdata)
+args.dirs.dev.tfdata = Path(args.dirs.dev.tfdata)
+args.dirs.train_supervise.tfdata = Path(args.dirs.train_supervise.tfdata)
+mkdirs(args.dirs.train.tfdata)
+mkdirs(args.dirs.dev.tfdata)
+mkdirs(args.dirs.train_supervise.tfdata)
+args.dirs.train.feat_len = args.dirs.train.tfdata/'feature_length.txt'
+args.dirs.dev.feat_len = args.dirs.dev.tfdata/'feature_length.txt'
+args.dirs.train_supervise.feat_len = args.dirs.train_supervise.tfdata/'feature_length.txt'
 
 try:
     args.dim_input = TFData.read_tfdata_info(args.dirs.train.tfdata)['dim_feature']
     args.data.train_size = TFData.read_tfdata_info(args.dirs.train.tfdata)['size_dataset']
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']
 
-    args.dirs.train.tfdata = Path(args.dirs.train.tfdata)
-    args.dirs.dev.tfdata = Path(args.dirs.dev.tfdata)
-    if not args.dirs.train.tfdata.is_dir(): args.dirs.train.tfdata.mkdir()
-    if not args.dirs.dev.tfdata.is_dir(): args.dirs.dev.tfdata.mkdir()
-    args.dirs.train.feat_len = args.dirs.train.tfdata/'feature_length.txt'
-    args.dirs.dev.feat_len = args.dirs.dev.tfdata/'feature_length.txt'
-
 except:
     print("have not converted to tfdata yet: ")
-
-# if args.dirs.lm_config:
-#     args.args_lm = AttrDict(yaml.load(open(args.dirs.lm_config), Loader=yaml.SafeLoader))
-#     args.args_lm.dim_output = len(args.token2idx)

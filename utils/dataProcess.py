@@ -167,7 +167,7 @@ def process_raw_feature(fea, args):
     return fea
 
 
-def get_alignRate(wav_file, args, transform=True):
+def get_alignRate(wav_file, args):
     len_sig = get_audio_length(wav_file, args.data.dim_raw_input)
     feat = audio2vector(wav_file, args.data.dim_raw_input, method=args.data.featType)
     feat = process_raw_feature(feat, args)

@@ -1,22 +1,34 @@
 dirs:
     train:
-        data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
-        # data: /data/sxu/easton/data/AISHELL/tfdata/train_39/1.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/text
+        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
+        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/iter1_ali/train.phone.frame
+        align:
+        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/wav.scp
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_feats_13_5_1_3
+    train_supervise:
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/text
+        align: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/exp/tri5a_ali/train.phone.frame
+        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/wav.scp
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_feats_13_5_1_3
     dev:
-        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/dev/text
+        align: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/exp/tri5a_dev_ali/dev.phone.frame
+        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/dev/wav.scp
+        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_feats_13_5_1_3
     test:
-        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/test/text
     lm:
         data: /data/sxu/easton/data/AISHELL/train_phone.txt
     type: csv
-    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    vocab: /data/sxu/easton/data/AISHELL/phones.txt
+    # checkpoint:
+
 data:
     featType: mfcc
     dim_raw_input: 13
     num_context: 5
-    downsample: 2
+    downsample: 1
     add_delta: True
     unit: phone
 
@@ -37,21 +49,19 @@ opti:
     D:
         lr: 0.0005
 
-dev_step: 200
-decode_step: 200
-save_step: 200
+dev_step: 50
+decode_step: 50
+save_step: 50
 
 gpus: '0'
 # gpus: '1,2,3'
-batch_size: 1000
-num_supervised: 250
+batch_size: 250
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 num_epochs: 100000
 num_steps: 500000
-max_seq_len: 60
-seed: 8
+max_seq_len: 300
+seed: 0
 
-lambda_fs: 0.005
+lambda_fs: 0.001
 lambda_gp: 10.0
-lambda_supervision: 1.0

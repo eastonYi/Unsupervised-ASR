@@ -12,6 +12,7 @@ from utils.dataset import ASR_align_DataSet
 from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor
 
 from models.GAN import PhoneClassifier
+# from models.GAN import PhoneClassifier2 as PhoneClassifier
 
 
 ITERS = 200000 # How many iterations to train for
@@ -93,13 +94,13 @@ def Train():
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
                    loss_supervise, x.shape, time()-start, step))
-            # with writer.as_default():
-            #     tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
+            with writer.as_default():
+                tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
             fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-            # with writer.as_default():
-            #     tf.summary.scalar("performance/fer", fer, step=step)
-            #     tf.summary.scalar("performance/cer", cer, step=step)
+            with writer.as_default():
+                tf.summary.scalar("performance/fer", fer, step=step)
+                tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
             monitor(dataset_dev[0], model)
         if step % args.save_step == 0:
@@ -133,11 +134,11 @@ def Decode(save_file):
     decode(dataset, model, args.idx2token, 'output/'+save_file)
 
 
-# @tf.function
+@tf.function
 def train_G_supervised(x, labels, model, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
         logits = model(x, training=True)
-        labels = tf.pad(labels, [[0, 0], [0, logits.shape[1]-labels.shape[1]]])
+        # labels = tf.pad(labels, [[0, 0], [0, logits.shape[1]-labels.shape[1]]])
         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
         gen_loss = ce_loss
 

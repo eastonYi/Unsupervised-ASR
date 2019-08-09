@@ -8,9 +8,10 @@ from utils.dataset import ASR_align_DataSet
 from utils.arguments import args
 from utils.tools import TFData, read_ngram, ngram2kernel, CE_loss, decode, monitor, stamps2indices, frames_constrain_loss, evaluate
 from models.EODM import P_Ngram, EODM_loss
+from models.GAN import PhoneClassifier
 
 
-def train(Model):
+def train():
     # load external LM
     with tf.device("/cpu:0"):
         dataset_train = ASR_align_DataSet(
@@ -56,9 +57,9 @@ def train(Model):
     kernel, py = ngram2kernel(ngram_py, args)
 
     # create model paremeters
-    model = Model(args)
+    G = PhoneClassifier(args)
     compute_p_ngram = P_Ngram(kernel, args)
-    model.summary()
+    G.summary()
     compute_p_ngram.summary()
 
     # build optimizer
@@ -68,7 +69,7 @@ def train(Model):
         optimizer = tf.keras.optimizers.SGD(lr=args.opti.lr, momentum=0.9, decay=0.98)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
-    ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer)
+    ckpt = tf.train.Checkpoint(G=G, optimizer=optimizer)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=5)
     step = 0
 
@@ -89,9 +90,9 @@ def train(Model):
         uttids, x = next(iter_feature_train)
         stamps = dataset_train.get_attrs('stamps', uttids.numpy())
 
-        loss_EODM, loss_fs = train_step(x, stamps, py, model, compute_p_ngram, optimizer, args.lambda_fs)
+        loss_EODM, loss_fs = train_step(x, stamps, py, G, compute_p_ngram, optimizer, args.lambda_fs)
         # loss_EODM = loss_fs = 0
-        loss_supervise = train_G_supervised(supervise_x, supervise_aligns, model, optimizer, args.dim_output, args.lambda_supervision)
+        loss_supervise = train_G_supervised(supervise_x, supervise_aligns, G, optimizer, args.dim_output, args.lambda_supervision)
 
         num_processed += len(x)
         progress = num_processed / args.data.train_size
@@ -104,12 +105,12 @@ def train(Model):
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
 
         if step % args.dev_step == 0:
-            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
-            monitor(dataset_dev[0], model)
+            monitor(dataset_dev[0], G)
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
@@ -117,6 +118,41 @@ def train(Model):
         step += 1
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
+
+
+def Decode(save_file):
+    dataset = ASR_align_DataSet(
+        trans_file=args.dirs.train.trans,
+        align_file=None,
+        uttid2wav=args.dirs.train.wav_scp,
+        feat_len_file=args.dirs.train.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
+    dataset_dev = ASR_align_DataSet(
+        trans_file=args.dirs.dev.trans,
+        align_file=args.dirs.dev.align,
+        uttid2wav=args.dirs.dev.wav_scp,
+        feat_len_file=args.dirs.dev.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
+
+    feature_dev = TFData(dataset=dataset_dev,
+                    dir_save=args.dirs.dev.tfdata,
+                    args=args).read()
+    feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
+
+    G = PhoneClassifier(args)
+    G.summary()
+
+    optimizer_G = tf.keras.optimizers.Adam(1e-4)
+    ckpt = tf.train.Checkpoint(G=G, optimizer_G=optimizer_G)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(ckpt_manager.latest_checkpoint)
+    print ('checkpoint {} restored!!'.format(ckpt_manager.latest_checkpoint))
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
+    decode(dataset, G, args.idx2token, 'output/'+save_file)
 
 
 def train_step(x, stamps, py, model, compute_p_ngram, optimizer, lambda_fs):
@@ -159,8 +195,10 @@ if __name__ == '__main__':
     param = parser.parse_args()
 
     print('CUDA_VISIBLE_DEVICES: ', args.gpus)
-
-    from models.GAN import PhoneClassifier as Model
+    os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    assert len(gpus) > 0, "Not enough GPU hardware devices available"
+    [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
 
     if param.name:
         args.dir_exps = args.dir_exps /  param.name
@@ -173,12 +211,9 @@ if __name__ == '__main__':
             print(args, file=fw)
 
     if param.mode == 'train':
-        os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
-        gpus = tf.config.experimental.list_physical_devices('GPU')
-        assert len(gpus) > 0, "Not enough GPU hardware devices available"
-        [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
+
         print('enter the TRAINING phrase')
-        train(Model)
+        train()
         # lm_assistant(Model, Model_LM)
 
         # python ../../main.py -m save --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
