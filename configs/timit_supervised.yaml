@@ -4,11 +4,16 @@ dirs:
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
+    # train_supervise:
+    #     trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
+    #     align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
+    #     wav_scp: /data/sxu/easton/data/TIMIT/train200_wav.scp
+    #     tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats
     train_supervise:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
-        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats
+        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_500
+        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_500.phone.frame
+        wav_scp: /data/sxu/easton/data/TIMIT/train500_wav.scp
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train500_feats
     dev:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
@@ -18,7 +23,7 @@ dirs:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_GAN/250_init/checkpoint
+    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/500/checkpoint
 
 data:
     featType: mfcc
@@ -30,7 +35,7 @@ data:
 
 model:
     G:
-        structure: lstm
+        structure: fc
         num_hidden: 512
         num_layers: 1
 
@@ -38,10 +43,10 @@ opti:
     type: adam
     lr: 0.0004
 
-dev_step: 200
-decode_step: 200
+dev_step: 100
+decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 500
-num_supervised:
+batch_size: 1000
+num_supervised: 500

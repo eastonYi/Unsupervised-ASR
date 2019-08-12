@@ -55,7 +55,7 @@ class ASR_align_DataSet(ASRDataSet):
         super().__init__(align_file, args, _shuffle, transform)
         self.dict_wavs = self.load_uttid2wav(uttid2wav)
         self.list_uttids = list(self.dict_wavs.keys())
-        self.dict_trans = self.load_trans(trans_file)
+        self.dict_trans = self.load_trans(trans_file) if trans_file else None
         self.dict_aligns = self.load_aligns(align_file, feat_len_file) if align_file else None
 
         if _shuffle:
@@ -69,13 +69,13 @@ class ASR_align_DataSet(ASRDataSet):
         if self.transform:
             feat = process_raw_feature(feat, self.args)
 
-        trans = self.dict_trans[uttid]
-
         try:
+            trans = self.dict_trans[uttid]
             align = self.dict_aligns[uttid]
             stamps = align2stamp(align)
             # print('align rate:', np.round(len(align)/len(feat)))
         except:
+            trans = None
             align = None
             stamps = None
 

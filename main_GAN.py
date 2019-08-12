@@ -36,18 +36,21 @@ def train():
         dataset_train_supervise = ASR_align_DataSet(
             trans_file=args.dirs.train_supervise.trans,
             align_file=args.dirs.train_supervise.align,
-            uttid2wav=args.dirs.train.wav_scp,
-            feat_len_file=args.dirs.train.feat_len,
+            uttid2wav=args.dirs.train_supervise.wav_scp,
+            feat_len_file=args.dirs.train_supervise.feat_len,
             args=args,
             _shuffle=False,
             transform=True)
+        feature_train_supervise = TFData(dataset=dataset_train_supervise,
+                        dir_save=args.dirs.train_supervise.tfdata,
+                        args=args).read()
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
                         args=args).read()
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read()
-        supervise_uttids, supervise_x = next(iter(feature_train.take(args.num_supervised).\
+        supervise_uttids, supervise_x = next(iter(feature_train_supervise.take(args.num_supervised).\
             padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
         supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
 
@@ -100,7 +103,7 @@ def train():
 
         uttids, x = next(iter_feature_train)
         stamps = dataset_train.get_attrs('stamps', uttids.numpy())
-        cost_G, fs = train_G(x, stamps, G, D, optimizer_G, args.lambda_fs)
+        cost_G, fs = train_G(x, stamps[:, :args.max_seq_len], G, D, optimizer_G, args.lambda_fs)
         # loss_supervise = 0
         loss_supervise = train_G_supervised(supervise_x, supervise_aligns, G, optimizer_G, args.dim_output, args.lambda_supervision)
 

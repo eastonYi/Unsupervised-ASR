@@ -11,7 +11,7 @@ def mkdirs(filename):
     if not filename.parent.is_dir():
         mkdirs(filename.parent)
 
-    if '.' not in str(filename):
+    if '.' not in str(filename) and not filename.is_dir():
         filename.mkdir()
 
 

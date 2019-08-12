@@ -50,18 +50,21 @@ args.dim_output = len(args.token2idx)
 
 args.dirs.train.tfdata = Path(args.dirs.train.tfdata)
 args.dirs.dev.tfdata = Path(args.dirs.dev.tfdata)
-args.dirs.train_supervise.tfdata = Path(args.dirs.train_supervise.tfdata)
 mkdirs(args.dirs.train.tfdata)
 mkdirs(args.dirs.dev.tfdata)
-mkdirs(args.dirs.train_supervise.tfdata)
 args.dirs.train.feat_len = args.dirs.train.tfdata/'feature_length.txt'
 args.dirs.dev.feat_len = args.dirs.dev.tfdata/'feature_length.txt'
-args.dirs.train_supervise.feat_len = args.dirs.train_supervise.tfdata/'feature_length.txt'
+
+try:
+    args.dirs.train_supervise.tfdata = Path(args.dirs.train_supervise.tfdata)
+    mkdirs(args.dirs.train_supervise.tfdata)
+    args.dirs.train_supervise.feat_len = args.dirs.train_supervise.tfdata/'feature_length.txt'
+except:
+    print("not found train_supervise")
 
 try:
     args.dim_input = TFData.read_tfdata_info(args.dirs.train.tfdata)['dim_feature']
     args.data.train_size = TFData.read_tfdata_info(args.dirs.train.tfdata)['size_dataset']
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']
-
 except:
     print("have not converted to tfdata yet: ")

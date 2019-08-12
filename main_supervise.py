@@ -47,12 +47,15 @@ def Train():
             dataset_train_supervise = ASR_align_DataSet(
                 trans_file=args.dirs.train_supervise.trans,
                 align_file=args.dirs.train_supervise.align,
-                uttid2wav=args.dirs.train.wav_scp,
-                feat_len_file=args.dirs.train.feat_len,
+                uttid2wav=args.dirs.train_supervise.wav_scp,
+                feat_len_file=args.dirs.train_supervise.feat_len,
                 args=args,
                 _shuffle=False,
                 transform=True)
-            supervise_uttids, supervise_x = next(iter(feature_train.take(args.num_supervised).\
+            feature_train_supervise = TFData(dataset=dataset_train_supervise,
+                            dir_save=args.dirs.train_supervise.tfdata,
+                            args=args).read()
+            supervise_uttids, supervise_x = next(iter(feature_train_supervise.take(args.num_supervised).\
                 padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
             supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
 
@@ -67,7 +70,7 @@ def Train():
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
     ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=5)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     step = 0
 
     # if a checkpoint exists, restore the latest checkpoint.
@@ -121,6 +124,18 @@ def Decode(save_file):
         args=args,
         _shuffle=False,
         transform=True)
+    dataset_dev = ASR_align_DataSet(
+        trans_file=args.dirs.dev.trans,
+        align_file=args.dirs.dev.align,
+        uttid2wav=args.dirs.dev.wav_scp,
+        feat_len_file=args.dirs.dev.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
+    feature_dev = TFData(dataset=dataset_dev,
+                    dir_save=args.dirs.dev.tfdata,
+                    args=args).read()
+    feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
     model = PhoneClassifier(args)
     model.summary()
@@ -130,6 +145,7 @@ def Decode(save_file):
 
     _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
     ckpt.restore(_ckpt_manager.latest_checkpoint)
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
     print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
     decode(dataset, model, args.idx2token, 'output/'+save_file)
 
