@@ -4,12 +4,13 @@ dirs:
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
     dev:
         wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
+        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats
     test:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/200/checkpoint
+    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_AE/try2/checkpoint
 
 data:
     featType: mfcc

@@ -450,6 +450,32 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     return loss
 
 
+def get_GRU_activation(layer, cell_inputs, hiddens):
+    """
+    gru/kernel: h_prev x h
+    gru/recurrent_kernel: h x (h*3)
+    gru/bias: 2 x (h*3)
+
+    cell_inputs: b x h_prev
+    hiddens: b x h
+    """
+    assert "GRU" in str(layer)
+    activation_fn = layer.recurrent_activation
+    kernel, recurrent_kernel, bias = layer.get_weights()
+    matrix_x = tf.matmul(cell_inputs, kernel)
+    matrix_x = tf.add(matrix_x, bias[0])
+    x_z, x_r, _ = tf.split(matrix_x, 3, axis=-1)
+
+    matrix_inner = tf.matmul(hiddens, recurrent_kernel)
+    matrix_inner = tf.add(matrix_inner, bias[1])
+    recurrent_z, recurrent_r, _ = tf.split(matrix_inner, 3, axis=-1)
+
+    z = tf.reduce_sum(activation_fn(x_z + recurrent_z), 1)
+    r = tf.reduce_sum(activation_fn(x_r + recurrent_r), 1)
+
+    return z, r
+
+
 def evaluate(feature, dataset, dev_size, model):
     list_acc = []
 
@@ -515,3 +541,38 @@ def decode(dataset, model, idx2token, save_file, log=False):
                 print('predicted align: ', _align)
                 print('predicted trans: ', line)
             fw.write(uttid + ' ' + line + '\n')
+
+
+def R_value(res_align, ref_align, region=2):
+    """
+    res_align, res_align: 1-dim np;.array
+    region: the left and right tolerant region size
+    """
+    N_ref = len(ref_align)
+    N_f = len(res_align)
+    N_hit = 0
+
+    _left = 0
+    for i, stamp in enumerate(ref_align):
+        left = max(_left, stamp-region)
+        right = min(stamp+region, (stamp+ref_align[i+1])/2)
+
+        for j, _stamp in enumerate(res_align):
+            if _stamp < left:
+                continue
+            elif _stamp > right:
+                j = j-1
+                break
+            else:
+                N_hit += 1
+                break
+        res_align = res_align[j:]
+        _left = left
+
+    HR = N_hit / N_ref
+    OS = N_f / N_ref - 1
+    r1 = np.square(np.pow(100-HR, 2), np.pow(OS, 2))
+    r2 = (HR - OS - 100) / 1.414
+    R = 1 - (abs(r1) + abs(r2)) / 200
+
+    return R
