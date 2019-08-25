@@ -5,6 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 from random import shuffle
 import hashlib
+import math
 
 
 def mkdirs(filename):
@@ -545,8 +546,12 @@ def decode(dataset, model, idx2token, save_file, log=False):
 
 def R_value(res_align, ref_align, region=2):
     """
-    res_align, res_align: 1-dim np;.array
+    res_align, res_align: 1-dim np.array
     region: the left and right tolerant region size
+    Demo:
+        res_align = [4,7,10,14,16]
+        ref_align = [3,5,9,11,15]
+        R_value(res_align, ref_align, region=2)
     """
     N_ref = len(ref_align)
     N_f = len(res_align)
@@ -555,7 +560,11 @@ def R_value(res_align, ref_align, region=2):
     _left = 0
     for i, stamp in enumerate(ref_align):
         left = max(_left, stamp-region)
-        right = min(stamp+region, (stamp+ref_align[i+1])/2)
+        try:
+            right = min(stamp+region, (stamp+ref_align[i+1])/2 + 0.01)
+        except IndexError:
+            right = stamp+region
+        # print('left:', left, 'right:', right)
 
         for j, _stamp in enumerate(res_align):
             if _stamp < left:
@@ -565,14 +574,15 @@ def R_value(res_align, ref_align, region=2):
                 break
             else:
                 N_hit += 1
+                # print(ref_align[i], res_align[j])
                 break
-        res_align = res_align[j:]
-        _left = left
+        res_align = res_align[j+1:]
+        _left = right
 
     HR = N_hit / N_ref
     OS = N_f / N_ref - 1
-    r1 = np.square(np.pow(100-HR, 2), np.pow(OS, 2))
-    r2 = (HR - OS - 100) / 1.414
-    R = 1 - (abs(r1) + abs(r2)) / 200
+    r1 = math.sqrt(math.pow(1-HR, 2) + math.pow(OS, 2))
+    r2 = (HR - OS - 1) / 1.414
+    R = 1 - (abs(r1) + abs(r2)) / 2
 
     return R
