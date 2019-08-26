@@ -430,7 +430,7 @@ def compute_ppl(logits, labels):
 
 
 def CE_loss(logits, labels, vocab_size, confidence=0.9):
-    mask = tf.cast(labels > 0, dtype=tf.float32)
+    mask = tf.cast(labels>0, dtype=tf.float32)
 
     low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)
     normalizing = -(confidence*tf.math.log(confidence) +
@@ -489,6 +489,7 @@ def evaluate(feature, dataset, dev_size, model):
         trans = dataset.get_attrs('trans', uttids.numpy())
         stamps = dataset.get_attrs('stamps', uttids.numpy())
         logits = model(x)
+        # logits, cut_idx, max_idx = model(x)
 
         acc = align_accuracy(logits, aligns)
         list_acc.append(acc)
@@ -519,7 +520,7 @@ def monitor(sample, model):
     print('trans: \n', sample['trans'])
 
 
-def decode(dataset, model, idx2token, save_file, log=False):
+def decode(dataset, model, idx2token, save_file, align=False, log=False):
     """
     decode without stamps
     decode align and shrink it to trans
@@ -537,36 +538,41 @@ def decode(dataset, model, idx2token, save_file, log=False):
                     continue
                 list_tokens.append(token)
                 token_prev = token
-            line = ' '.join(idx2token[token] for token in list_tokens)
+            if align:
+                line = ' '.join(str(token) for token in _align)
+            else:
+                line = ' '.join(idx2token[token] for token in list_tokens)
             if log:
                 print('predicted align: ', _align)
                 print('predicted trans: ', line)
             fw.write(uttid + ' ' + line + '\n')
 
 
-def R_value(res_align, ref_align, region=2):
+def R_value(res_stamps, ref_stamps, region=2):
     """
-    res_align, res_align: 1-dim np.array
+    res_stamps, res_stamps: 1-dim np.array
     region: the left and right tolerant region size
     Demo:
-        res_align = [4,7,10,14,16]
-        ref_align = [3,5,9,11,15]
-        R_value(res_align, ref_align, region=2)
+        res_stamps = [4,7,10,14,16]
+        ref_stamps = [3,5,9,11,15]
+        R_value(res_stamps, ref_stamps, region=2)
     """
-    N_ref = len(ref_align)
-    N_f = len(res_align)
+    print('ref_stamps:', ref_stamps)
+    print('res_stamps:', res_stamps)
+    N_ref = len(ref_stamps)
+    N_f = len(res_stamps)
     N_hit = 0
 
     _left = 0
-    for i, stamp in enumerate(ref_align):
+    for i, stamp in enumerate(ref_stamps):
         left = max(_left, stamp-region)
         try:
-            right = min(stamp+region, (stamp+ref_align[i+1])/2 + 0.01)
+            right = min(stamp+region, (stamp+ref_stamps[i+1])/2 + 0.01)
         except IndexError:
             right = stamp+region
         # print('left:', left, 'right:', right)
 
-        for j, _stamp in enumerate(res_align):
+        for j, _stamp in enumerate(res_stamps):
             if _stamp < left:
                 continue
             elif _stamp > right:
@@ -574,9 +580,9 @@ def R_value(res_align, ref_align, region=2):
                 break
             else:
                 N_hit += 1
-                # print(ref_align[i], res_align[j])
+                # print('hit:', ref_stamps[i], res_stamps[j])
                 break
-        res_align = res_align[j+1:]
+        res_stamps = res_stamps[j+1:]
         _left = right
 
     HR = N_hit / N_ref
@@ -584,5 +590,6 @@ def R_value(res_align, ref_align, region=2):
     r1 = math.sqrt(math.pow(1-HR, 2) + math.pow(OS, 2))
     r2 = (HR - OS - 1) / 1.414
     R = 1 - (abs(r1) + abs(r2)) / 2
+    print('r-value:', R, '\n')
 
     return R

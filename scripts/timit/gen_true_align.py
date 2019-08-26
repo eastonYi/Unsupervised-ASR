@@ -1,10 +1,32 @@
 import logging
 from argparse import ArgumentParser
+from pathlib import Path
+
 from utils.arguments import args
 from utils.dataProcess import get_alignRate
 
 
-def main(csv_file, phone, length_file, output):
+class MyDict(dict):
+    __missing__ = lambda self, key: key
+
+
+def main(dir_data, phone, length_file, output):
+    dict_mapping = MyDict()
+    dict_mapping.update({'ao': 'aa',
+                         'ax': 'ah', 'ax-h': 'ah',
+                         'axr': 'er',
+                         'hv': 'hh',
+                         'ix': 'ih',
+                         'el': 'l',
+                         'em': 'm',
+                         'en': 'n', 'nx': 'n',
+                         'eng': 'ng',
+                         'zh': 'sh',
+                         'ux': 'uw',
+                         'pcl': 'sil', 'tcl': 'sil', 'bcl': 'sil', 'kcl': 'sil', 'dcl': 'sil', 'gcl': 'sil', 'h#': 'sil', 'pau': 'sil', 'epi': 'sil',
+                         # 'q': ''})
+                         'q': 'sil'})
+
     with open(phone) as f:
         dict_phone = {}
         for line in f:
@@ -17,27 +39,32 @@ def main(csv_file, phone, length_file, output):
             uttid, length = line.split()
             dict_length[uttid] = int(length)
 
-    file = open(csv_file).readline().strip().split(',')[0]
-    rate = get_alignRate(file, args)
+    rate = get_alignRate('/data/sxu/easton/data/TIMIT/test_wavs/DR3/MJBR0/SX191.wav', args)
+    print('MJBR0/SX191.wav align rate:', rate)
 
-    with open(csv_file) as f, open(output, 'w') as fw:
-        for line in f:
-            file, phone, stamps = line.strip().split(',')
-            uttid = file.split('/')[-2] + '_' + file.split('/')[-1].split('.')[0]
-            length = dict_length[uttid]
-            align = []
-            _stamp = 0
-            for phone, stamp in zip(phone.split(), stamps.split()):
-                repetition = round((int(stamp) - _stamp)/rate)
-                align.extend([dict_phone[phone]]*repetition)
-                _stamp = int(stamp)
-            align.extend(['1']*(length-len(align)))
-            new_line = uttid + ' ' + ' '.join(align[:length])
-            fw.write(new_line + '\n')
+    with open(output, 'w') as fw:
+        p = Path(dir_data)
+        for f_stamps in p.glob('*/*/*.PHN'):
+            list_align = []
+            with open(f_stamps) as f:
+                for line in f:
+                    stamp_b, stamp_e, phone = line.strip().split()
+                    dupli = int((int(stamp_e) - int(stamp_b)) / rate)
+                    list_align.extend([dict_phone[dict_mapping[phone]]] * dupli)
+
+                uttid = '_'.join(str(f_stamps).split('.')[0].split('/')[-2:])
+                len_feat = dict_length[uttid]
+                # print('len_feat:', len_feat, 'len(list_align):', len(list_align))
+                if not 0 < len_feat-len(list_align) < 50:
+                    print('len_feat:', len_feat, 'len(list_align):', len(list_align))
+                list_align.extend([1] * (len_feat-len(list_align)))
+                line = uttid + ' ' + ' '.join(map(str, list_align))
+                fw.write(line + '\n')
+
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--csv_file', type=str, dest='csv_file', default=None)
+    parser.add_argument('--dir_data', type=str, dest='dir_data', default=None)
     parser.add_argument('--length_file', type=str, dest='length_file', default=None)
     parser.add_argument('--phone', type=str, dest='phone', default=None)
     parser.add_argument('--output', type=str, dest='output_file', default=None)
@@ -46,5 +73,5 @@ if __name__ == '__main__':
     param = parser.parse_args()
     # Read config
     logging.basicConfig(level=logging.INFO)
-    main(param.csv_file, param.phone, param.length_file, param.output_file)
+    main(param.dir_data, param.phone, param.length_file, param.output_file)
     logging.info("Done")

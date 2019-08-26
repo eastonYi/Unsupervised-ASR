@@ -53,6 +53,25 @@ def PhoneClassifier(args):
     return model
 
 
+def PhoneClassifier2(args):
+    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+                                        name='generator_input_x')
+
+    if args.model.G.structure == 'bGRU':
+        # feed it to NN
+        for _ in range(args.model.G.num_layers):
+            x = Bidirectional(GRU(args.model.G.num_hidden,
+                                  return_sequences=True))(x)
+
+    logits = Dense(args.dim_output, activation='linear')(x)
+
+    model = tf.keras.Model(inputs=input_x,
+                           outputs=logits,
+                           name='sequence_generator')
+
+    return model
+
+
 def PhoneDiscriminator(args):
     dim_hidden = args.model.D.num_hidden
 
@@ -148,4 +167,3 @@ def PhoneDiscriminator3(args):
                            name='sequence_discriminator')
 
     return model
-    

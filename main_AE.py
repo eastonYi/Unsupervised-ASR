@@ -159,22 +159,17 @@ def Decode(save_file):
     ckpt.restore(ckpt_manager.latest_checkpoint)
     print('checkpoint {} restored!!'.format(ckpt_manager.latest_checkpoint))
 
-    plot_align(model, dataset_dev, 0)
-    # list_a1, list_a2 = [], []
-    # i = 0
-    # for batch in feature_train:
-    #     uttids, x = batch
-    #     batch_size = len(x)
-    #     h1 = h2 = tf.zeros([batch_size, args.model.num_hidden_rnn])
-    #     for x_t in tf.split(x, x.shape[1], axis=1):
-    #
-    #         x_fc, x_cell, h1, h2 = model([x_t, h1, h2], training=False)
-    #         z, r = get_GRU_activation(model.layers[3], cell_inputs=x_fc[:, 0, :], hiddens=h1)
-    #         list_a1.append(z[i])
-    #         list_a2.append(r[i])
-    #
-    #     plot_align(uttids[i].numpy().decode('utf-8'), list_a1, list_a2)
-    #     break
+    # plot_align(model, dataset_dev, 0)
+
+    for batch in feature_train:
+        uttids, x = batch
+        batch_size = len(x)
+        h1 = h2 = tf.zeros([batch_size, args.model.num_hidden_rnn])
+        for x_t in tf.split(x, x.shape[1], axis=1):
+    
+            x_fc, x_cell, h1, h2 = model([x_t, h1, h2], training=False)
+            z, r = get_GRU_activation(model.layers[3], cell_inputs=x_fc[:, 0, :], hiddens=h1)
+
 
 def plot_align(model, dataset_dev, i):
     uttid = dataset_dev.list_uttids[i]

@@ -11,8 +11,8 @@ from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
 from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor
 
-from models.GAN import PhoneClassifier
-# from models.GAN import PhoneClassifier2 as PhoneClassifier
+# from models.GAN import PhoneClassifier
+from models.GAN import PhoneClassifier2 as PhoneClassifier
 
 
 ITERS = 200000 # How many iterations to train for
@@ -77,7 +77,7 @@ def Train():
     if args.dirs.checkpoint:
         _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
         ckpt.restore(_ckpt_manager.latest_checkpoint)
-        print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+        print('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
         step = int(_ckpt_manager.latest_checkpoint.split('-')[-1])
 
     start_time = datetime.now()
@@ -147,14 +147,38 @@ def Decode(save_file):
     ckpt.restore(_ckpt_manager.latest_checkpoint)
     fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
     print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-    decode(dataset, model, args.idx2token, 'output/'+save_file)
+    # decode(dataset, model, args.idx2token, 'output/'+save_file)
+    decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
-@tf.function
+# @tf.function
+# def train_G_supervised(x, labels, model, optimizer_G, dim_output):
+#     with tf.GradientTape() as tape_G:
+#         logits = model(x, training=True)
+#         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
+#         gen_loss = ce_loss
+#
+#     gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+#     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+#
+#     return gen_loss
+
+# @tf.function
 def train_G_supervised(x, labels, model, optimizer_G, dim_output):
+    # random cut head & make it can be split evenly
+    len_seq = args.model.G.len_seq
+    cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
+    num_split = int((x.shape[1]-cut_idx) // len_seq)
+    max_idx = cut_idx + num_split * len_seq
+    # reshape x
+    list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
+    x = tf.concat(list_tensors, 0)
+    # reshape label
+    list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
+    labels = tf.concat(list_tensors, 0)
+
     with tf.GradientTape() as tape_G:
         logits = model(x, training=True)
-        # labels = tf.pad(labels, [[0, 0], [0, logits.shape[1]-labels.shape[1]]])
         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
         gen_loss = ce_loss
 
@@ -183,7 +207,7 @@ if __name__ == '__main__':
 
     if param.mode == 'train':
         """
-        python ../../main.py -m decode --gpu 1 --name kin_asr -c configs/rna_char_big3.yaml
+        python main.py -m decode --gpu 1 --name align_supervised_dev.text -c configs/timit_supervised.yaml
         """
         if param.name:
             args.dir_exps = args.dir_exps / param.name
