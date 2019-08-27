@@ -548,48 +548,92 @@ def decode(dataset, model, idx2token, save_file, align=False, log=False):
             fw.write(uttid + ' ' + line + '\n')
 
 
-def R_value(res_stamps, ref_stamps, region=2):
-    """
-    res_stamps, res_stamps: 1-dim np.array
-    region: the left and right tolerant region size
-    Demo:
-        res_stamps = [4,7,10,14,16]
-        ref_stamps = [3,5,9,11,15]
-        R_value(res_stamps, ref_stamps, region=2)
-    """
-    print('ref_stamps:', ref_stamps)
-    print('res_stamps:', res_stamps)
-    N_ref = len(ref_stamps)
-    N_f = len(res_stamps)
-    N_hit = 0
+# def R_value(res_stamps, ref_stamps, region=2):
+#     """
+#     res_stamps, res_stamps: 1-dim np.array
+#     region: the left and right tolerant region size
+#     Demo:
+#         res_stamps = [4,7,10,14,16]
+#         ref_stamps = [3,5,9,11,15]
+#         R_value(res_stamps, ref_stamps, region=2)
+#     """
+#     print('ref_stamps:', ref_stamps)
+#     print('res_stamps:', res_stamps)
+#     N_ref = len(ref_stamps)
+#     N_f = len(res_stamps)
+#     N_hit = 0
+#
+#     _left = 0
+#     for i, stamp in enumerate(ref_stamps):
+#         left = max(_left, stamp-region)
+#         try:
+#             right = min(stamp+region, (stamp+ref_stamps[i+1])/2 + 0.01)
+#         except IndexError:
+#             right = stamp+region
+#         # print('left:', left, 'right:', right)
+#
+#         for j, _stamp in enumerate(res_stamps):
+#             if _stamp < left:
+#                 continue
+#             elif _stamp > right:
+#                 j = j-1
+#                 break
+#             else:
+#                 N_hit += 1
+#                 # print('hit:', ref_stamps[i], res_stamps[j])
+#                 break
+#         res_stamps = res_stamps[j+1:]
+#         _left = right
+#
+#     HR = N_hit / N_ref
+#     OS = N_f / N_ref - 1
+#     r1 = math.sqrt(math.pow(1-HR, 2) + math.pow(OS, 2))
+#     r2 = (HR - OS - 1) / 1.414
+#     R = 1 - (abs(r1) + abs(r2)) / 2
+#     print('r-value:', R, '\n')
+#
+#     return R
 
-    _left = 0
-    for i, stamp in enumerate(ref_stamps):
-        left = max(_left, stamp-region)
-        try:
-            right = min(stamp+region, (stamp+ref_stamps[i+1])/2 + 0.01)
-        except IndexError:
-            right = stamp+region
-        # print('left:', left, 'right:', right)
 
-        for j, _stamp in enumerate(res_stamps):
-            if _stamp < left:
-                continue
-            elif _stamp > right:
-                j = j-1
+def P_align(bounds, seg_bnds, tolerance_window=2):
+    #Precision
+    hit = 0.0
+    for bound in seg_bnds:
+        for l in range(tolerance_window + 1):
+            if (bound + l in bounds) and (bound + l > 0):
+                hit += 1
                 break
-            else:
-                N_hit += 1
-                # print('hit:', ref_stamps[i], res_stamps[j])
+            elif (bound - l in bounds) and (bound - l > 0):
+                hit += 1
                 break
-        res_stamps = res_stamps[j+1:]
-        _left = right
+    return hit / (len(seg_bnds))
 
-    HR = N_hit / N_ref
-    OS = N_f / N_ref - 1
-    r1 = math.sqrt(math.pow(1-HR, 2) + math.pow(OS, 2))
-    r2 = (HR - OS - 1) / 1.414
-    R = 1 - (abs(r1) + abs(r2)) / 2
-    print('r-value:', R, '\n')
+
+def R_align(bounds, seg_bnds, tolerance_window=2):
+    #Recall
+    hit = 0.0
+    for bound in bounds:
+        for l in range(tolerance_window + 1):
+            if (bound + l in seg_bnds) and (bound + l > 0):
+                hit += 1
+                break
+            elif (bound - l in seg_bnds) and (bound - l > 0):
+                hit += 1
+                break
+
+    return hit / (len(bounds))
+
+
+def R_value(ref_stamps, res_stamps, region=2):
+    u_p = P_align(bounds=ref_stamps, seg_bnds=res_stamps, tolerance_window=region)
+    u_r = R_align(bounds=ref_stamps, seg_bnds=res_stamps, tolerance_window=region)
+
+    if u_r * u_p == 0:
+        R = -1.
+    else:
+        u_os = u_r/u_p - 1
+        r1 = math.fabs(math.sqrt((1-u_r)*(1-u_r) + math.pow(u_os, 2)))
+        r2 = math.fabs( (u_r - 1 - u_os)/math.sqrt(2))
+        R = 1 - (r1 + r2) / 2
 
     return R
