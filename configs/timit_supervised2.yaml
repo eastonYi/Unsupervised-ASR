@@ -2,60 +2,50 @@ dirs:
     train:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
         # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        # align: output/200_split_bGRU_len20.align
-        align: output/supervise_split_bGRU.align.fixed
+        align: output/200_split_bGRU_len20.align
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_0_1_3
     train_supervise:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/train200_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats_13_0_1_3
     dev:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
         align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
+        # align: /data/sxu/easton/data/TIMIT/test.ali2
         wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats_13_0_1_3
     test:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
-    lm:
-        data: /data/sxu/easton/data/TIMIT/train_phone.txt
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/200/checkpoint
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_split_bGRU.align/checkpoint
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 5
+    num_context: 0
     downsample: 1
     add_delta: True
     unit: phone
 
 model:
     G:
-        structure: fc
+        structure: bGRU
         num_hidden: 512
         num_layers: 1
-    D:
-        num_hidden: 512
-        num_blocks: 5
-opti:
-    D_G_rate: 1
-    G:
-        lr: 0.0001
-    D:
-        lr: 0.0001
+        len_seq: 20
 
-dev_step: 200
-decode_step: 200
-save_step: 200
+opti:
+    type: adam
+    lr: 0.0004
+
+dev_step: 100
+decode_step: 100
+save_step: 100
 
 gpus: '0'
-batch_size: 300
-num_supervised: 200
-max_seq_len: 60
-
-lambda_fs: 0.00002
-lambda_gp: 10.0
-lambda_supervision: 5.0
+batch_size: 100
+num_supervised:
