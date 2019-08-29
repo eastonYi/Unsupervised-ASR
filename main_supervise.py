@@ -11,8 +11,8 @@ from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
 from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor
 
-# from models.GAN import PhoneClassifier
-from models.GAN import PhoneClassifier2 as PhoneClassifier
+from models.GAN import PhoneClassifier
+# from models.GAN import PhoneClassifier2 as PhoneClassifier
 
 
 ITERS = 200000 # How many iterations to train for
@@ -151,32 +151,8 @@ def Decode(save_file):
     decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
-# @tf.function
-# def train_G_supervised(x, labels, model, optimizer_G, dim_output):
-#     with tf.GradientTape() as tape_G:
-#         logits = model(x, training=True)
-#         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
-#         gen_loss = ce_loss
-#
-#     gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
-#     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
-#
-#     return gen_loss
-
-# @tf.function
+@tf.function
 def train_G_supervised(x, labels, model, optimizer_G, dim_output):
-    # random cut head & make it can be split evenly
-    len_seq = args.model.G.len_seq
-    cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
-    num_split = int((x.shape[1]-cut_idx) // len_seq)
-    max_idx = cut_idx + num_split * len_seq
-    # reshape x
-    list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
-    x = tf.concat(list_tensors, 0)
-    # reshape label
-    list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
-    labels = tf.concat(list_tensors, 0)
-
     with tf.GradientTape() as tape_G:
         logits = model(x, training=True)
         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
@@ -186,6 +162,30 @@ def train_G_supervised(x, labels, model, optimizer_G, dim_output):
     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
 
     return gen_loss
+
+# # @tf.function
+# def train_G_supervised(x, labels, model, optimizer_G, dim_output):
+#     # random cut head & make it can be split evenly
+#     len_seq = args.model.G.len_seq
+#     cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
+#     num_split = int((x.shape[1]-cut_idx) // len_seq)
+#     max_idx = cut_idx + num_split * len_seq
+#     # reshape x
+#     list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
+#     x = tf.concat(list_tensors, 0)
+#     # reshape label
+#     list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
+#     labels = tf.concat(list_tensors, 0)
+#
+#     with tf.GradientTape() as tape_G:
+#         logits = model(x, training=True)
+#         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
+#         gen_loss = ce_loss
+#
+#     gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+#     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+#
+#     return gen_loss
 
 
 if __name__ == '__main__':

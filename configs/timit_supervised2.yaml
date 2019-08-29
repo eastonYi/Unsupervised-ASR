@@ -33,8 +33,8 @@ data:
 
 model:
     G:
-        structure: bGRU
-        num_hidden: 512
+        structure: lstm
+        num_hidden: 128
         num_layers: 1
         len_seq: 20
 
