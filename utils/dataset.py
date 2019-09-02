@@ -71,11 +71,12 @@ class ASR_align_DataSet(ASRDataSet):
 
         try:
             trans = self.dict_trans[uttid]
-            align = self.dict_aligns[uttid]
-            stamps = align2stamp(align)
-            # print('align rate:', np.round(len(align)/len(feat)))
         except:
             trans = None
+        try:
+            align = self.dict_aligns[uttid]
+            stamps = align2stamp(align)
+        except:
             align = None
             stamps = None
 
@@ -87,7 +88,7 @@ class ASR_align_DataSet(ASRDataSet):
 
         return sample
 
-    def get_attrs(self, attr, uttids):
+    def get_attrs(self, attr, uttids, max_len=None):
         """
         length serves for the align attr to ensure the align's length same as feature
         """
@@ -121,10 +122,10 @@ class ASR_align_DataSet(ASRDataSet):
             list_len.append(len(res))
 
         if attr in ('trans', 'align', 'stamps'):
-            max_len = max(list_len)
+            max_len = max(list_len) if not max_len else max_len
             list_padded = []
             for res in list_res:
-                list_padded.append(np.concatenate([res, [0]*(max_len-len(res))]))
+                list_padded.append(np.concatenate([res, [0]*(max_len-len(res))])[: max_len])
             list_res = np.array(list_padded, np.int32)
 
         return list_res

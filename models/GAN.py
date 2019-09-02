@@ -143,7 +143,7 @@ def PhoneDiscriminator2(args):
 def PhoneDiscriminator3(args):
     dim_hidden = args.model.D.num_hidden
 
-    x = input = tf.keras.layers.Input(shape=[args.max_seq_len, args.dim_output],
+    x = input = tf.keras.layers.Input(shape=[args.max_label_len, args.dim_output],
                                       name='discriminator_input_x')
 
     x = Dense(dim_hidden, use_bias=False, activation='linear')(x)

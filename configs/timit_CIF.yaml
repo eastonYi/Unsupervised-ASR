@@ -1,21 +1,16 @@
 dirs:
     train:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
-        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        align: output/200_split_bGRU_len20.align
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_0_1_3
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_2_3_3
     train_supervise:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
         wav_scp: /data/sxu/easton/data/TIMIT/train200_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats_13_0_1_3
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats_13_2_3_3
     dev:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
-        # align: /data/sxu/easton/data/TIMIT/test.ali2
         wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats_13_0_1_3
+        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats_13_2_3_3
     test:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
     type: csv
@@ -26,26 +21,38 @@ dirs:
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 0
-    downsample: 1
+    num_context: 2
+    downsample: 3
     add_delta: True
     unit: phone
 
 model:
-    G:
-        structure: lstm
+    attention:
+        structure: GRU
         num_hidden: 128
+        threshold: 0.95
+    G:
+        structure: fc
+        num_hidden: 512
         num_layers: 1
-        len_seq: 20
-
+    D:
+        num_hidden: 512
+        num_blocks: 5
 opti:
-    type: adam
-    lr: 0.0004
+    D_G_rate: 1
+    G:
+        lr: 0.0002
+    D:
+        lr: 0.0002
 
 dev_step: 100
 decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 100
+batch_size: 300
+max_label_len: 70
 num_supervised:
+
+lambda_gp: 10.0
+lambda_supervision: 5.0
