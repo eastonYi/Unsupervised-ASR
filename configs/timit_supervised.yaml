@@ -1,8 +1,8 @@
 dirs:
     train:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
-        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        align: output/200_split_bGRU_len20.align
+        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
+        # align: output/200_split_bGRU_len20.align
         wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
     train_supervise:
@@ -26,7 +26,7 @@ dirs:
     type: csv
     vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
     # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
-    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_split_bGRU.align/checkpoint
+    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/test/checkpoint
 
 data:
     featType: mfcc

@@ -45,6 +45,8 @@ def PhoneClassifier(args):
         x = tf.concat([x_1, x_2], -1)
 
     logits = Dense(args.dim_output, activation='linear')(x)
+    musk = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
+    logits *= musk[:, :, None]
 
     model = tf.keras.Model(inputs=input_x,
                            outputs=logits,

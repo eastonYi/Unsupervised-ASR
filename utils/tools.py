@@ -267,9 +267,8 @@ def batch_cer(preds, reference):
     batch_dist = 0
     batch_len = 0
     for res, ref in zip(preds, reference):
-        length = np.sum(ref>0)
-        res = align_shrink(res[:length])
-        ref = align_shrink(ref[:length])
+        res = align_shrink(res[res>0])
+        ref = align_shrink(ref[ref>0])
         batch_dist += ed.eval(res, ref)
         batch_len += len(ref)
 
@@ -415,9 +414,10 @@ def align_accuracy(P_output, labels):
 
 
 def get_predicts(P_output):
+    musk = tf.cast(tf.reduce_sum(tf.abs(P_output), -1) > 0, tf.float32)
+    res = tf.argmax(P_output * musk[:, :, None], axis=-1, output_type=tf.int32)
 
-    return tf.argmax(P_output, axis=-1, output_type=tf.int32)
-
+    return res
 
 def compute_ppl(logits, labels):
     loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels, logits)
@@ -477,7 +477,7 @@ def get_GRU_activation(layer, cell_inputs, hiddens):
     return z, r
 
 
-def evaluate(feature, dataset, dev_size, model):
+def evaluate(feature, dataset, dev_size, model, beam_size=None):
     list_acc = []
 
     num_processed = 0
@@ -489,14 +489,16 @@ def evaluate(feature, dataset, dev_size, model):
         trans = dataset.get_attrs('trans', uttids.numpy())
         stamps = dataset.get_attrs('stamps', uttids.numpy())
         logits = model(x)
-        # logits, cut_idx, max_idx = model(x)
 
         acc = align_accuracy(logits, aligns)
         list_acc.append(acc)
 
         indices = stamps2indices(stamps, 'middle')
         _logits = tf.gather_nd(logits, indices)
-        preds = get_predicts(_logits)
+        if beam_size:
+            preds = beam_search_MAP(_logits, beam_size)
+        else:
+            preds = get_predicts(_logits)
         batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), trans)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
@@ -637,3 +639,83 @@ def R_value(ref_stamps, res_stamps, region=2):
         R = 1 - (r1 + r2) / 2
 
     return R
+
+
+def beam_search_MAP(logits, beam_size=20, lp=30.0):
+    """
+    beam search for better preds (not alignment) with  MAP.
+    We add length penalty to overcome poor precision,
+    one error predict within the boundry will bring two edit errors.
+
+    logits: b x t x v
+    marks_token: B * beam_size, T
+    """
+    inf = 1e10
+    distribution = tf.nn.softmax(logits)
+    B, T, V = distribution.shape
+    aligns = tf.zeros([B * beam_size, 0], tf.int32)
+    scores = tf.constant([0.0] + [-inf]*(beam_size-1), dtype=tf.float32) # [beam_size]
+    scores = tf.tile(scores, multiples=[B]) # [B x beam_size]
+    base_indices = tf.reshape(tf.tile(tf.range(B)[:, None], multiples=[1, beam_size]), [-1])
+    preds_prev = -1 * tf.ones([B * beam_size, beam_size], tf.int32)
+    lengths = tf.zeros([B * beam_size], tf.int32)
+    marks_token = tf.zeros([B * beam_size, 0], tf.int32)
+    for t in range(T):
+        p_prior = tf.ones([B*beam_size, V]) / V
+        p_past = tf.ones([B*beam_size, V]) / V
+        p_cur = tf.reshape(tf.tile(distribution[:, t, :], [1, beam_size]), [B*beam_size, V])
+        p_log = tf.math.log(p_past) + tf.math.log(p_cur) - tf.math.log(p_prior)
+
+        scores_cur, preds_cur = tf.nn.top_k(p_log, k=beam_size, sorted=True)
+
+        # current scores
+        scores = scores[:, None] + scores_cur # [B x beam_size, beam_size]
+        scores = tf.reshape(scores, [B, beam_size ** 2])
+
+        # current predicts
+        marks_cur = tf.cast(tf.not_equal(preds_cur, preds_prev), tf.int32)
+
+        # length penalty
+        lengths = lengths[:, None] + marks_cur
+        lp_score = tf.reshape(tf.pow((5+tf.cast(lengths, tf.float32))/6, lp), [B, beam_size ** 2])
+        scores /= lp_score
+
+        # pruning
+        _, k_indices = tf.nn.top_k(scores, k=beam_size)
+        k_indices = base_indices * beam_size * beam_size + tf.reshape(k_indices, [-1]) # [B x beam_size]
+
+        # update marks_token
+        marks_cur = tf.reshape(marks_cur, [-1])
+        marks_cur = tf.gather(marks_cur, k_indices)
+        marks_token = tf.gather(marks_token, k_indices // beam_size)
+        marks_token = tf.concat([marks_token, marks_cur[:, None]], 1)
+
+        # update lengths
+        lengths = tf.reshape(lengths, [-1])
+        lengths = tf.gather(lengths, k_indices)
+
+        # print('lengths:', (lengths - tf.reduce_sum((marks_token), -1)).numpy())
+
+        # Update scores
+        scores = tf.reshape(scores, [-1])
+        scores = tf.gather(scores, k_indices)
+
+        # update preds
+        preds_prev = preds_cur
+        preds_cur = tf.reshape(preds_cur, [-1])
+        preds_cur = tf.gather(preds_cur, k_indices)
+        # k_indices: [0~B x beam_size x beam_size], preds: [0~B x beam_size]
+        aligns = tf.gather(aligns, k_indices // beam_size)
+        aligns = tf.concat([aligns, preds_cur[:, None]], -1)
+
+    aligns = aligns[::beam_size, :]
+    marks_token = marks_token[::beam_size, :]
+    lengths = lengths[::beam_size]
+    max_len = tf.reduce_max(lengths)
+    predicts = []
+    for b in range(B):
+        predict = tf.reshape(tf.gather(aligns[b, :], tf.where(marks_token[b, :]>0)), [-1])
+        pad = tf.zeros([max_len - lengths[b]], tf.int32)
+        predicts.append(tf.concat([predict, pad], 0))
+
+    return tf.stack(predicts, 0)

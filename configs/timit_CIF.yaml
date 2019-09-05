@@ -28,7 +28,9 @@ data:
 
 model:
     attention:
-        structure: GRU
+        # structure: bGRU
+        structure: conv
+        filter_size: 9
         num_hidden: 128
         threshold: 0.95
     G:
@@ -50,8 +52,8 @@ decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 300
-max_label_len: 70
+batch_size: 600
+max_label_len: 60
 num_supervised:
 
 lambda_gp: 10.0

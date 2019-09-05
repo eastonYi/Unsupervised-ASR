@@ -3,15 +3,86 @@ from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, 
 # from utils.tools import pad_list
 
 
+def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
+    conv_op = tf.keras.layers.Conv1D(
+        filters=dim_output,
+        kernel_size=(kernel_size,),
+        strides=strides,
+        padding='same',
+        use_bias=True)
+
+    return conv_op
+
+
+def Conv2D(dim_output, kernel_size, strides=1, padding='same'):
+    conv_op = tf.keras.layers.Conv2D(
+        filters=dim_output,
+        kernel_size=(kernel_size, kernel_size),
+        strides=strides,
+        padding='same',
+        use_bias=True)
+
+    return conv_op
+
+
+# def attentionAssign(args):
+#     x = input_x = Input(shape=[None, args.dim_input],
+#                         name='input_x')
+#     if args.model.attention.structure == 'bGRU':
+#         x = Bidirectional(GRU(args.model.attention.num_hidden, return_sequences=True))(x)
+#     elif args.model.attention.structure == 'conv':
+#         x = Conv1D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
+#         # x = tf.keras.layers.LayerNormalization()(x)
+#         # x = tf.keras.layers.ReLU()(x)
+#
+#     alpha = Dense(1, activation='sigmoid')(x)[:, :, 0]
+#     model = tf.keras.Model(inputs=input_x,
+#                            outputs=alpha,
+#                            name='alpha')
+#
+#     return model
+
+
 def attentionAssign(args):
     x = input_x = Input(shape=[None, args.dim_input],
                         name='input_x')
-    x = Bidirectional(GRU(args.model.attention.num_hidden, return_sequences=True))(x)
+    if args.model.attention.structure == 'bGRU':
+        for _ in range(1):
+            x = Bidirectional(GRU(args.model.attention.num_hidden/2, return_sequences=True))(x)
+    elif args.model.attention.structure == 'conv':
+        # x = tf.stack(tf.split(x, 3, -1), 3)
+        for _ in range(3):
+            x = Conv1D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
+            # x = Conv2D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
+            # x = tf.keras.layers.LayerNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+        x = Dense(args.model.attention.num_hidden, activation='relu')(x)
+    hidden = x
+    x = Conv1D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
+    # x = tf.keras.layers.LayerNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
     alpha = Dense(1, activation='sigmoid')(x)[:, :, 0]
 
     model = tf.keras.Model(inputs=input_x,
-                           outputs=alpha,
+                           outputs=[hidden, alpha],
                            name='alpha')
+
+    return model
+
+
+def PhoneClassifier(args, dim_input=None):
+    dim_input = dim_input if dim_input else args.model.dim_input
+    x = input_x = tf.keras.layers.Input(shape=[None, dim_input],
+                                        name='generator_input_x')
+    if args.model.G.structure == 'fc':
+        for _ in range(args.model.G.num_layers):
+            x = Dense(args.model.G.num_hidden, activation='relu')(x)
+
+    logits = Dense(args.dim_output, activation='linear')(x)
+
+    model = tf.keras.Model(inputs=input_x,
+                           outputs=logits,
+                           name='sequence_generator')
 
     return model
 
@@ -129,64 +200,67 @@ def attentionAssign(args):
 #
 #     return ls
 
-# # @tf.function
-# def CIF(x, alphas, threshold):
-#     """
-#     fires: b x t  (fire in place > thresdhold)
-#     integrate: b
-#
-#     alphas: b x t
-#     alpha: b
-#
-#     frames: b x t x h
-#     frame: b x h
-#
-#     l: t x h
-#     ls: b x t x h
-#     """
-#     batch_size, len_time, hidden_size = x.shape
-#
-#     integrate = tf.zeros([batch_size])
-#     list_fires = []
-#     frame = tf.zeros([batch_size, hidden_size])
-#     list_frames = []
-#
-#     for t in range(len_time):
-#         alpha = alphas[:, t]
-#         distribution_completion = tf.ones([batch_size]) - integrate
-#         integrate += alpha
-#         list_fires.append(integrate)
-#
-#         fire_place = integrate > threshold
-#         integrate = tf.where(fire_place,
-#                              x=integrate - tf.ones([batch_size]),
-#                              y=integrate)
-#         cur = tf.where(fire_place,
-#                        x=distribution_completion,
-#                        y=alpha)
-#         remainds = alpha - cur
-#
-#         frame += cur[:, None] * x[:, t, :]
-#         list_frames.append(frame)
-#         frame = remainds[:, None] * x[:, t, :]
-#
-#     fires = tf.stack(list_fires, 1)
-#     frames = tf.stack(list_frames, 1)
-#     list_ls = []
-#
-#     len_labels = tf.cast(tf.round(tf.reduce_sum(alphas, -1)), tf.int32)
-#     max_label_len = tf.reduce_max(len_labels)
-#     for b, len in zip(range(batch_size), len_labels):
-#         fire = fires[b, :]
-#         l = tf.gather_nd(frames[b, :, :], tf.where(fire > threshold))
-#         pad_l = tf.zeros([max_label_len-len, hidden_size])
-#         list_ls.append(tf.concat([l, pad_l], 0))
-#
-#     return tf.stack(list_ls, 0)
-
 
 # @tf.function
 def CIF(x, alphas, threshold):
+    """
+    fires: b x t  (fire in place > thresdhold)
+    integrate: b
+
+    alphas: b x t
+    alpha: b
+
+    frames: b x t x h
+    frame: b x h
+
+    l: t x h
+    ls: b x t x h
+    """
+    batch_size, len_time, hidden_size = x.shape
+
+    integrate = tf.zeros([batch_size])
+    list_fires = []
+    frame = tf.zeros([batch_size, hidden_size])
+    list_frames = []
+
+    for t in range(len_time):
+        alpha = alphas[:, t]
+        distribution_completion = tf.ones([batch_size]) - integrate
+        integrate += alpha
+        list_fires.append(integrate)
+
+        fire_place = integrate > threshold
+        integrate = tf.where(fire_place,
+                             x=integrate - tf.ones([batch_size]),
+                             y=integrate)
+        cur = tf.where(fire_place,
+                       x=distribution_completion,
+                       y=alpha)
+        remainds = alpha - cur
+
+        frame += cur[:, None] * x[:, t, :]
+        list_frames.append(frame)
+        frame = tf.where(tf.tile(fire_place[:, None], [1, hidden_size]),
+                         x=remainds[:, None] * x[:, t, :],
+                         y=frame)
+
+    fires = tf.stack(list_fires, 1)
+    frames = tf.stack(list_frames, 1)
+    list_ls = []
+    # len_labels = tf.cast(tf.round(tf.reduce_sum(alphas, -1)), tf.int32)
+    len_labels = tf.cast(tf.math.ceil(tf.reduce_sum(alphas, -1)-0.001), tf.int32)
+    max_label_len = tf.reduce_max(len_labels)
+    for b in range(batch_size):
+        fire = fires[b, :]
+        l = tf.gather_nd(frames[b, :, :], tf.where(fire > threshold))
+        pad_l = tf.zeros([max_label_len-l.shape[0], hidden_size])
+        list_ls.append(tf.concat([l, pad_l], 0))
+
+    return tf.stack(list_ls, 0)
+
+
+# @tf.function
+def CIF_Classifier(x, alphas, threshold, Classifier):
     """
     fires: b x t  (fire in place > thresdhold)
     integrate: b

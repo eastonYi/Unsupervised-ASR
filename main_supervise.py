@@ -9,7 +9,7 @@ import tensorflow as tf
 from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor
+from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor, beam_search_MAP
 
 from models.GAN import PhoneClassifier
 # from models.GAN import PhoneClassifier2 as PhoneClassifier
@@ -145,10 +145,12 @@ def Decode(save_file):
 
     _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
     ckpt.restore(_ckpt_manager.latest_checkpoint)
-    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
     print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10)
+    print('FER:{:.3f}\t PER:{:.3f}'.format(fer, cer))
     # decode(dataset, model, args.idx2token, 'output/'+save_file)
-    decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
+    # decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
 @tf.function
