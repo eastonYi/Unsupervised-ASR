@@ -5,15 +5,15 @@
   "uploadOnSave": true,
   "useAtomicWrites": true,
   "deleteLocal": true,
-  "hostname": "172.18.30.90",
+  "hostname": "172.18.30.114",
   "port": "22",
-  "target": "/data/sxu/easton/projects/EODM",
+  "target": "/home/user/easton/projects/EODM",
   "ignore": [
     ".remote-sync.json",
     ".git/**"
   ],
-  "username": "sxu",
-  "password": "sxu123",
+  "username": "user",
+  "password": "      ",
   "watch": [],
   "transport": "scp"
 }

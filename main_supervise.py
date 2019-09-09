@@ -9,14 +9,14 @@ import tensorflow as tf
 from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import frames_constrain_loss, align_accuracy, get_predicts, CE_loss, evaluate, decode, monitor, beam_search_MAP
+from utils.tools import CE_loss, evaluate, monitor
 
 from models.GAN import PhoneClassifier
 # from models.GAN import PhoneClassifier2 as PhoneClassifier
 
-
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
+
 
 def Train():
     dataset_train = ASR_align_DataSet(
@@ -58,6 +58,7 @@ def Train():
             supervise_uttids, supervise_x = next(iter(feature_train_supervise.take(args.num_supervised).\
                 padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
             supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
+            supervise_bounds = dataset_train_supervise.get_attrs('bounds', supervise_uttids.numpy())
 
         iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
                 ((), [None, args.dim_input])).prefetch(buffer_size=5))
@@ -88,21 +89,30 @@ def Train():
         if args.num_supervised:
             x = supervise_x
             loss_supervise = train_G_supervised(supervise_x, supervise_aligns, model, optimizer_G, args.dim_output)
+            # loss_supervise, bounds_loss = train_G_bounds_supervised(
+            #     x, supervise_bounds, supervise_aligns, model, optimizer_G, args.dim_output)
         else:
             uttids, x = next(iter_feature_train)
             aligns = dataset_train.get_attrs('align', uttids.numpy())
             # trans = dataset_train.get_attrs('trans', uttids.numpy())
             loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
+            # loss_supervise = train_G_TBTT_supervised(x, aligns, model, optimizer_G, args.dim_output)
+            # bounds = dataset_train.get_attrs('bounds', uttids.numpy())
+            # loss_supervise, bounds_loss = train_G_bounds_supervised(x, bounds, aligns, model, optimizer_G, args.dim_output)
 
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
                    loss_supervise, x.shape, time()-start, step))
+            # print('loss_supervise: {:.3f}\tloss_bounds: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
+            #        loss_supervise, bounds_loss, x.shape, time()-start, step))
             with writer.as_default():
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
-            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+            fer, cer_0 = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=True)
+            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=False)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=step)
+                tf.summary.scalar("performance/cer_0", cer_0, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
             monitor(dataset_dev[0], model)
@@ -116,14 +126,14 @@ def Train():
 
 
 def Decode(save_file):
-    dataset = ASR_align_DataSet(
-        trans_file=args.dirs.train.trans,
-        align_file=None,
-        uttid2wav=args.dirs.train.wav_scp,
-        feat_len_file=args.dirs.train.feat_len,
-        args=args,
-        _shuffle=False,
-        transform=True)
+    # dataset = ASR_align_DataSet(
+    #     trans_file=args.dirs.train.trans,
+    #     align_file=None,
+    #     uttid2wav=args.dirs.train.wav_scp,
+    #     feat_len_file=args.dirs.train.feat_len,
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
     dataset_dev = ASR_align_DataSet(
         trans_file=args.dirs.dev.trans,
         align_file=args.dirs.dev.align,
@@ -146,14 +156,15 @@ def Decode(save_file):
     _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
     ckpt.restore(_ckpt_manager.latest_checkpoint)
     print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10)
+    fer, cer_0 = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=True)
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=False)
+    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10, with_stamp=False)
     print('FER:{:.3f}\t PER:{:.3f}'.format(fer, cer))
     # decode(dataset, model, args.idx2token, 'output/'+save_file)
     # decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
-@tf.function
+# @tf.function
 def train_G_supervised(x, labels, model, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
         logits = model(x, training=True)
@@ -165,29 +176,61 @@ def train_G_supervised(x, labels, model, optimizer_G, dim_output):
 
     return gen_loss
 
-# # @tf.function
-# def train_G_supervised(x, labels, model, optimizer_G, dim_output):
-#     # random cut head & make it can be split evenly
-#     len_seq = args.model.G.len_seq
-#     cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
-#     num_split = int((x.shape[1]-cut_idx) // len_seq)
-#     max_idx = cut_idx + num_split * len_seq
-#     # reshape x
-#     list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
-#     x = tf.concat(list_tensors, 0)
-#     # reshape label
-#     list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
-#     labels = tf.concat(list_tensors, 0)
-#
-#     with tf.GradientTape() as tape_G:
-#         logits = model(x, training=True)
-#         ce_loss = CE_loss(logits, labels, dim_output, confidence=0.9)
-#         gen_loss = ce_loss
-#
-#     gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
-#     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
-#
-#     return gen_loss
+@tf.function
+def train_G_TBTT_supervised(x, labels, model, optimizer_G, dim_output):
+    """
+    random cut head & make it can be split evenly
+    """
+    len_seq = args.model.G.len_seq
+    cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
+    num_split = int((x.shape[1]-cut_idx) // len_seq)
+    max_idx = cut_idx + num_split * len_seq
+    # reshape x
+    list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
+    x = tf.concat(list_tensors, 0)
+    # reshape label
+    list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
+    labels = tf.concat(list_tensors, 0)
+
+    with tf.GradientTape() as tape_G:
+        logits = model(x, training=True)
+        ce_loss = CE_loss(logits, labels, dim_output, confidence=0.8)
+        gen_loss = ce_loss
+
+    gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+
+    return gen_loss
+
+# @tf.function
+def train_G_bounds_supervised(x, bounds, labels, model, optimizer_G, dim_output):
+    """
+    random cut head & make it can be split evenly
+    """
+    len_seq = args.model.G.len_seq
+    cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
+    num_split = int((x.shape[1]-cut_idx) // len_seq)
+    max_idx = cut_idx + num_split * len_seq
+    # reshape x
+    list_tensors = tf.split(x[:, cut_idx:max_idx, :], num_split, axis=1)
+    x = tf.concat(list_tensors, 0)
+    # reshape label
+    list_tensors = tf.split(bounds[:, cut_idx:max_idx], num_split, axis=1)
+    bounds = tf.concat(list_tensors, 0)
+    list_tensors = tf.split(labels[:, cut_idx:max_idx], num_split, axis=1)
+    labels = tf.concat(list_tensors, 0)
+
+    with tf.GradientTape() as tape_G:
+        logits, logits_bounds = model(x, training=True)
+        ce_loss = CE_loss(logits, labels, dim_output, confidence=0.8)
+        bounds_loss = CE_loss(logits_bounds, bounds, 2, confidence=0.8)
+        # bounds_loss = 0
+        gen_loss = ce_loss + bounds_loss
+
+    gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+
+    return gen_loss, bounds_loss
 
 
 if __name__ == '__main__':

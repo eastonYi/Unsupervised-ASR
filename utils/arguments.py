@@ -31,7 +31,7 @@ args.list_gpus = ['/gpu:{}'.format(i) for i in range(args.num_gpus)]
 
 # dirs
 dir_dataInfo = Path.cwd() / 'data'
-dir_exps = Path.cwd() / 'exps'
+dir_exps = Path.cwd() / 'exps' / args.dirs.exp
 args.dir_exps = dir_exps / CONFIG_FILE.split('/')[-1].split('.')[0]
 args.dir_log = args.dir_exps / 'log'
 args.dir_checkpoint = args.dir_exps / 'checkpoint'

@@ -8,12 +8,30 @@ from tqdm import tqdm
 from random import shuffle, random, randint
 import multiprocessing
 import tensorflow as tf
+from abc import ABCMeta, abstractmethod
 
 from .dataProcess import audio2vector, get_audio_length, process_raw_feature
-from .tools import align2stamp
-from eastonCode.dataProcessing.dataHelper import DataSet, SimpleDataLoader
+from .tools import align2stamp, align2bound
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
+
+class DataSet:
+    __metaclass__ = ABCMeta
+    def __iter__(self):
+        for idx in range(len(self)):
+            yield self[idx]
+
+    @abstractmethod
+    def __getitem__(self, idx):
+        """
+        """
+
+    @abstractmethod
+    def __len__(self):
+        """
+        """
+    def __call__(self, idx):
+        return self.__getitem__(idx)
 
 
 class ASRDataSet(DataSet):
@@ -116,12 +134,16 @@ class ASR_align_DataSet(ASRDataSet):
                 align = self.dict_aligns[uttid]
                 stamps = align2stamp(align)
                 res = stamps
+            elif attr == 'bounds':
+                align = self.dict_aligns[uttid]
+                bounds = align2bound(align)
+                res = bounds
             else:
                 raise KeyError
             list_res.append(res)
             list_len.append(len(res))
 
-        if attr in ('trans', 'align', 'stamps'):
+        if attr in ('trans', 'align', 'stamps', 'bounds'):
             max_len = max(list_len) if not max_len else max_len
             list_padded = []
             for res in list_res:
@@ -227,7 +249,7 @@ class LMDataSet(DataSet):
             with open(filename) as f:
                 for line in f:
                     line = line.strip()
-                    if len(line) > self.args.max_seq_len:
+                    if len(line) > self.args.model.D.max_label_len:
                         continue
                     text_ids = [self.token2idx[word] for word in line]
                     src_ids = text_ids[:-1]
@@ -271,7 +293,7 @@ class TextDataSet(LMDataSet):
             with open(filename) as f:
                 for line in f:
                     line = line.strip().split()
-                    if len(line) > self.args.max_seq_len:
+                    if len(line) > self.args.model.D.max_label_len:
                         continue
                     text_ids = [self.token2idx[word] for word in line]
 

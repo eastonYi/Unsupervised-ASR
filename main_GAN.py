@@ -3,12 +3,13 @@
 from datetime import datetime
 from time import time
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='0'
 import tensorflow as tf
 
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet, TextDataSet
 from utils.tools import TFData, gradient_penalty, frames_constrain_loss, stamps2indices,\
-    CE_loss, evaluate, monitor, decode
+    CE_loss, evaluate, monitor, decode, bounds2stamps
 
 from models.GAN import PhoneClassifier, PhoneDiscriminator3
 # from models.GAN import PhoneClassifier2 as PhoneClassifier
@@ -53,6 +54,8 @@ def train():
         supervise_uttids, supervise_x = next(iter(feature_train_supervise.take(args.num_supervised).\
             padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
         supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
+        supervise_bounds = dataset_train_supervise.get_attrs('bounds', supervise_uttids.numpy())
+
 
         iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
                 ((), [None, args.dim_input])).prefetch(buffer_size=5))
@@ -63,7 +66,7 @@ def train():
         tfdata_train = tf.data.Dataset.from_generator(
             dataset_text, (tf.int32), (tf.TensorShape([None])))
         iter_text = iter(tfdata_train.cache().repeat().shuffle(1000).map(
-            lambda x: x[:args.max_seq_len]).padded_batch(args.batch_size, ([args.max_seq_len])).prefetch(buffer_size=5))
+            lambda x: x[:args.model.D.max_label_len]).padded_batch(args.batch_size, ([args.model.D.max_label_len])).prefetch(buffer_size=5))
 
 
     # create model paremeters
@@ -99,13 +102,20 @@ def train():
             stamps = dataset_train.get_attrs('stamps', uttids.numpy())
             text = next(iter_text)
             P_Real = tf.one_hot(text, args.dim_output)
-            cost_D, gp = train_D(x, stamps[:, :args.max_seq_len], P_Real, text>0, G, D, optimizer_D, args.lambda_gp)
+            cost_D, gp = train_D(x, stamps, P_Real, text>0, G, D, optimizer_D,
+                                 args.lambda_gp, args.model.D.max_label_len)
+            # cost_D, gp = train_D(x, P_Real, text>0, G, D, optimizer_D,
+            #                      args.lambda_gp, args.model.G.len_seq, args.model.D.max_label_len)
 
         uttids, x = next(iter_feature_train)
         stamps = dataset_train.get_attrs('stamps', uttids.numpy())
-        cost_G, fs = train_G(x, stamps[:, :args.max_seq_len], G, D, optimizer_G, args.lambda_fs)
-        # loss_supervise = 0
+        cost_G, fs = train_G(x, stamps, G, D, optimizer_G, args.lambda_fs)
+        # cost_G, fs = train_G(x, G, D, optimizer_G,
+        #                      args.lambda_fs, args.model.G.len_seq, args.model.D.max_label_len)
+
         loss_supervise = train_G_supervised(supervise_x, supervise_aligns, G, optimizer_G, args.dim_output, args.lambda_supervision)
+        # loss_supervise, bounds_loss = train_G_bounds_supervised(
+        #     supervise_x, supervise_bounds, supervise_aligns, G, optimizer_G, args.dim_output)
 
         num_processed += len(x)
         progress = num_processed / args.data.train_size
@@ -119,9 +129,12 @@ def train():
                 tf.summary.scalar("costs/fs", fs, step=step)
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
-            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
+            # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G)
+            fer, cer_0 = evaluate(feature_dev, dataset_dev, args.data.dev_size, G, beam_size=0, with_stamp=True)
+            fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, G, beam_size=0, with_stamp=False)
             with writer.as_default():
                 tf.summary.scalar("performance/fer", fer, step=step)
+                tf.summary.scalar("performance/cer_0", cer_0, step=step)
                 tf.summary.scalar("performance/cer", cer, step=step)
         if step % args.decode_step == 0:
             monitor(dataset_dev[0], G)
@@ -156,23 +169,56 @@ def train_G(x, stamps, G, D, optimizer_G, lambda_fs):
 
     return gen_cost, fs
 
+# def train_G(x, G, D, optimizer_G, lambda_fs, len_G, len_D):
+#     cut_idx = tf.random.uniform((), minval=0, maxval=len_G, dtype=tf.dtypes.int32).numpy()
+#     num_split = int(len_D // len_G)
+#     list_tensors = tf.split(x[:, cut_idx:(cut_idx + len_D), :], num_split, axis=1)
+#     x = tf.concat(list_tensors, 0)
+#
+#     params_G = G.trainable_variables[:-2]
+#     # ['dense_1/kernel:0', 'dense_1/bias:0']
+#     with tf.GradientTape(watch_accessed_variables=False) as tape_G:
+#         tape_G.watch(params_G)
+#         logits, logits_bounds = G(x, training=True)
+#
+#         # logits
+#         list_tensors = tf.split(logits, num_split, axis=0)
+#         logits = tf.concat(list_tensors, 1)
+#         list_tensors = tf.split(logits_bounds, num_split, axis=0)
+#         logits_bounds = tf.concat(list_tensors, 1)
+#
+#         P_G = tf.nn.softmax(logits)
+#         bounds = tf.argmax(logits_bounds, axis=-1, output_type=tf.int32)
+#         stamps = bounds2stamps(bounds)
+#         indices = stamps2indices(stamps)
+#         _P_G = tf.gather_nd(P_G, indices)
+#         # disc_fake = D([_P_G, aligns>0], training=True)
+#         disc_fake = D(_P_G, training=True)
+#
+#         gen_cost = -tf.reduce_mean(disc_fake)
+#         # gen_cost = tf.reduce_mean(tf.math.squared_difference(disc_fake, 1))
+#         fs = frames_constrain_loss(logits, stamps)
+#         # fs = 0
+#         gen_cost += lambda_fs * fs
+#
+#     gradients_G = tape_G.gradient(gen_cost, params_G)
+#     optimizer_G.apply_gradients(zip(gradients_G, params_G))
+#
+#     return gen_cost, fs
 
-def train_D(x, stamps, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
-    indices = stamps2indices(stamps)
+
+def train_D(x, stamps, P_Real, mask_real, G, D, optimizer_D, lambda_gp, len_D):
+    indices = stamps2indices(stamps[:, :len_D])
     params_D = D.trainable_variables
     with tf.GradientTape(watch_accessed_variables=False) as tape_D:
         tape_D.watch(params_D)
-        logits= G(x, training=True)
+        logits = G(x, training=True)
         P_G = tf.nn.softmax(logits)
         _P_G = tf.gather_nd(P_G, indices)
-        # disc_real = D([P_Real, mask_real], training=True) # to be +inf
-        # disc_fake = D([_P_G, aligns>0], training=True) # to be -inf
         disc_real = D(P_Real, training=True) # to be +inf
         disc_fake = D(_P_G, training=True) # to be -inf
 
         disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-        # disc_cost = tf.reduce_mean(disc_fake**2) + tf.reduce_mean(tf.math.squared_difference(disc_real, 1))
-        # gp = gradient_penalty(D, P_Real, _P_G, mask_real=mask_real, mask_fake=aligns>0)
         gp = gradient_penalty(D, P_Real, _P_G)
         disc_cost += lambda_gp * gp
 
@@ -180,6 +226,30 @@ def train_D(x, stamps, P_Real, mask_real, G, D, optimizer_D, lambda_gp):
     optimizer_D.apply_gradients(zip(gradients_D, params_D))
 
     return disc_cost, gp
+
+
+# def train_D(x, P_Real, mask_real, G, D, optimizer_D, lambda_gp, len_G, len_D):
+#     cut_idx = tf.random.uniform((), minval=0, maxval=5, dtype=tf.dtypes.int32).numpy()
+#     params_D = D.trainable_variables
+#     with tf.GradientTape(watch_accessed_variables=False) as tape_D:
+#         tape_D.watch(params_D)
+#         logits, logits_bounds = G(x, training=True)
+#         bounds = tf.argmax(logits_bounds, axis=-1, output_type=tf.int32)
+#         stamps = bounds2stamps(bounds)
+#         indices = stamps2indices(stamps)
+#         P_G = tf.nn.softmax(logits)
+#         _P_G = tf.gather_nd(P_G, indices)[:, cut_idx:(cut_idx + len_D), :]
+#         disc_real = D(P_Real, training=True) # to be +inf
+#         disc_fake = D(_P_G, training=True) # to be -inf
+#
+#         disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
+#         gp = gradient_penalty(D, P_Real, _P_G)
+#         disc_cost += lambda_gp * gp
+#
+#     gradients_D = tape_D.gradient(disc_cost, params_D)
+#     optimizer_D.apply_gradients(zip(gradients_D, params_D))
+#
+#     return disc_cost, gp
 
 
 def Decode(save_file):
@@ -221,13 +291,44 @@ def Decode(save_file):
 def train_G_supervised(x, aligns, G, optimizer, dim_output, lambda_supervision):
     with tf.GradientTape() as tape_G:
         logits = G(x, training=True)
-        ce_loss = CE_loss(logits, aligns, dim_output, confidence=0.9)
+        ce_loss = CE_loss(logits, aligns, dim_output, confidence=0.8)
         loss = ce_loss * lambda_supervision
 
     gradients_G = tape_G.gradient(loss, G.trainable_variables)
     optimizer.apply_gradients(zip(gradients_G, G.trainable_variables))
 
     return ce_loss
+
+
+def train_G_bounds_supervised(x, bounds, labels, model, optimizer_G, dim_output):
+    """
+    random cut head & make it can be split evenly
+    """
+    len_seq = args.model.G.len_seq
+    cut_idx = tf.random.uniform((), minval=0, maxval=len_seq, dtype=tf.dtypes.int32).numpy()
+    num_split = int((x.shape[1]-cut_idx) // len_seq)
+    max_idx = cut_idx + num_split * len_seq
+
+    # reshape x
+    x_pad = tf.pad(x[:, cut_idx:max_idx, :], [[0,0], [0,tf.reduce_max([max_idx-x.shape[1], 0])], [0,0]])
+    x_reshaped = tf.concat(tf.split(x_pad, num_split, axis=1), 0)
+
+    bounds_pad = tf.pad(bounds[:, cut_idx:max_idx], [[0,0], [0,tf.reduce_max([max_idx-x.shape[1], 0])]])
+    bounds_reshaped = tf.concat(tf.split(bounds_pad, num_split, axis=1), 0)
+    labels_pad = tf.pad(labels[:, cut_idx:max_idx], [[0,0], [0,tf.reduce_max([max_idx-x.shape[1], 0])]])
+    labels_reshaped = tf.concat(tf.split(labels_pad, num_split, axis=1), 0)
+
+    with tf.GradientTape() as tape_G:
+        logits, logits_bounds = model(x_reshaped, training=True)
+        ce_loss = CE_loss(logits, labels_reshaped, dim_output, confidence=0.8)
+        bounds_loss = CE_loss(logits_bounds, bounds_reshaped, 2, confidence=0.8)
+        # bounds_loss = 0
+        gen_loss = ce_loss + bounds_loss
+
+    gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+
+    return gen_loss, bounds_loss
 
 
 if __name__ == '__main__':

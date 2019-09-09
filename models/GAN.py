@@ -33,6 +33,10 @@ def PhoneClassifier(args):
         for _ in range(args.model.G.num_layers):
             x = Bidirectional(LSTM(args.model.G.num_hidden,
                                    return_sequences=True))(x)
+    elif args.model.G.structure == 'bGRU':
+        for _ in range(args.model.G.num_layers):
+            x = Bidirectional(GRU(args.model.G.num_hidden,
+                                  return_sequences=True))(x)
     elif args.model.G.structure == 'fc+lstm':
         x_1 = input_x
         for _ in range(args.model.G.num_layers):
@@ -43,6 +47,13 @@ def PhoneClassifier(args):
         x_2 = tf.keras.layers.ReLU()(x_2)
 
         x = tf.concat([x_1, x_2], -1)
+    elif args.model.G.structure == 'fc+GRU':
+        x = input_x
+        # for _ in range(args.model.G.num_layers):
+        #     x = Dense(args.model.G.num_hidden, activation='relu')(x)
+        x = Dense(args.model.G.num_fc_hidden, activation='relu')(x)
+        x = Dense(args.model.G.num_hidden, activation='linear')(x)
+        x = Bidirectional(GRU(args.model.G.num_cell_hidden, return_sequences=True))(x)
 
     logits = Dense(args.dim_output, activation='linear')(x)
     musk = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
@@ -58,17 +69,44 @@ def PhoneClassifier(args):
 def PhoneClassifier2(args):
     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
                                         name='generator_input_x')
-
-    if args.model.G.structure == 'bGRU':
-        # feed it to NN
+    if args.model.G.structure == 'fc':
+        for _ in range(args.model.G.num_layers):
+            x = Dense(args.model.G.num_hidden, activation='relu')(x)
+    elif args.model.G.structure == 'lstm':
+        for _ in range(args.model.G.num_layers):
+            x = LSTM(args.model.G.num_hidden,
+                     return_sequences=True)(x)
+    elif args.model.G.structure == 'gru':
+        for _ in range(args.model.G.num_layers):
+            x = tf.keras.layers.GRU(args.model.G.num_hidden,
+                                    dropout=args.model.G.dropout,
+                                    return_sequences=True)(x)
+    elif args.model.G.structure == 'blstm':
+        for _ in range(args.model.G.num_layers):
+            x = Bidirectional(LSTM(args.model.G.num_hidden,
+                                   return_sequences=True))(x)
+    elif args.model.G.structure == 'bGRU':
         for _ in range(args.model.G.num_layers):
             x = Bidirectional(GRU(args.model.G.num_hidden,
                                   return_sequences=True))(x)
+    elif args.model.G.structure == 'fc+lstm':
+        x_1 = input_x
+        for _ in range(args.model.G.num_layers):
+            x_1 = Dense(args.model.G.num_hidden, activation='relu')(x_1)
 
+        x_2 = x_1
+        x_2 = LSTM(64, return_sequences=True, dropout=0.2)(x_2)
+        x_2 = tf.keras.layers.ReLU()(x_2)
+
+        x = tf.concat([x_1, x_2], -1)
+
+    musk = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
     logits = Dense(args.dim_output, activation='linear')(x)
+    logits *= musk[:, :, None]
 
+    logits2 = Dense(2, activation='linear')(x)
     model = tf.keras.Model(inputs=input_x,
-                           outputs=logits,
+                           outputs=[logits, logits2],
                            name='sequence_generator')
 
     return model
@@ -145,7 +183,7 @@ def PhoneDiscriminator2(args):
 def PhoneDiscriminator3(args):
     dim_hidden = args.model.D.num_hidden
 
-    x = input = tf.keras.layers.Input(shape=[args.max_label_len, args.dim_output],
+    x = input = tf.keras.layers.Input(shape=[args.model.D.max_label_len, args.dim_output],
                                       name='discriminator_input_x')
 
     x = Dense(dim_hidden, use_bias=False, activation='linear')(x)

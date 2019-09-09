@@ -1,32 +1,26 @@
 dirs:
     train:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        # align: output/200_split_bGRU_len20.align
-        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/train.trans
+        align: /home/user/easton/data/TIMIT/kaldi_gen/train.phone.frame
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats
     train_supervise:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_200.phone.frame
-        wav_scp: /data/sxu/easton/data/TIMIT/train200_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats
-    # train_supervise:
-    #     trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_500
-    #     align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train_500.phone.frame
-    #     wav_scp: /data/sxu/easton/data/TIMIT/train500_wav.scp
-    #     tfdata: /data/sxu/easton/data/TIMIT/tfdata/train500_feats
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
+        align: /home/user/easton/data/TIMIT/kaldi_gen/train_200.phone.frame
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats
     dev:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
-        align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_test_ali/test.phone.frame
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
+        align: /home/user/easton/data/TIMIT/kaldi_gen/test.phone.frame
         # align: /data/sxu/easton/data/TIMIT/test.ali2
-        wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/test_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats
     test:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
     type: csv
-    vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
+    vocab: /home/user/easton/data/TIMIT/phone39.vocab
     # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
-    checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/test/checkpoint
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit_supervised/bGRU_20_bound/checkpoint
 
 data:
     featType: mfcc
@@ -38,10 +32,19 @@ data:
 
 model:
     G:
-        structure: bGRU
+        # structure: bGRU
+        # structure: fc
+        # num_hidden: 512
+        # num_layers: 1
+        # len_seq: 20
+        # structure: fc+GRU
+        # num_hidden: 8
+        # num_cell_hidden: 32
+        # num_layers: 1
+
+        structure: fc
         num_hidden: 512
         num_layers: 1
-        len_seq: 20
 
 opti:
     type: adam
@@ -53,4 +56,4 @@ save_step: 100
 
 gpus: '0'
 batch_size: 100
-num_supervised:
+num_supervised: 200
