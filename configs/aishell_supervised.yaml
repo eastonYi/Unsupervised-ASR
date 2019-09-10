@@ -1,46 +1,56 @@
 dirs:
+    exp: aishell
     train:
-        data: /data/sxu/easton/data/AISHELL/train_phone_67.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train_feats_13_5_2_3
+    train_supervise:
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train6000.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train6000.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train6000_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train6000_feats_13_5_2_3
     dev:
-        data: /data/sxu/easton/data/AISHELL/dev_phone_1k.csv
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_1k
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/dev.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/dev_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_feats_13_5_2_3
     test:
-        data: /data/sxu/easton/data/AISHELL/test_phone_67.csv
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/test.trans
     type: csv
-    vocab: /data/sxu/easton/data/AISHELL/phones_67.txt
+    vocab: /home/user/easton/data/AISHELL/kaldi_gen/phones217.vocab
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 5
+    left_context: 5
+    right_context: 5
     downsample: 2
     add_delta: True
     unit: phone
 
 model:
     G:
-        structure: fc
-        num_hidden: 128
-        num_layers: 1
-        # structure: gru
-        # num_hidden: 128
+        # structure: fc
+        # num_hidden: 512
         # num_layers: 1
+        structure: bGRU
+        num_hidden: 256
+        num_layers: 1
         # dropout: 0.5
 
 opti:
     type: adam
     lr: 0.0004
 
-dev_step: 50
-decode_step: 50
-save_step: 50
+dev_step: 200
+decode_step: 200
+save_step: 200
 
 gpus: '0'
-batch_size: 1800
+batch_size: 200
 num_supervised:
 num_batch_tokens: 80000
 bucket_boundaries: 238,300,372,437,800
 seed: 8
-
 lambda_fs: 0.0001

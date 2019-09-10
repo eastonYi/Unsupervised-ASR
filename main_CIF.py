@@ -51,7 +51,7 @@ def train():
     assigner.summary()
     G.summary()
 
-    optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.5, beta_2=0.9)
+    optimizer_G = tf.keras.optimizers.Adam(args.opti.G.lr, beta_1=0.9, beta_2=0.95)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
     ckpt = tf.train.Checkpoint(G=G, optimizer_G=optimizer_G)
@@ -114,9 +114,10 @@ def train_G_supervised(x, y, assigner, G, optimizer, dim_output, lambda_supervis
 
         l = CIF(hidden, alpha, threshold=args.model.attention.threshold)
         logits= G(l, training=True)
-        ce_loss = CE_loss(logits, y, dim_output, confidence=0.9)
+        ce_loss = CE_loss(logits, y, dim_output, confidence=0.8)
 
-        quantity_loss = tf.reduce_mean(tf.losses.mean_squared_error(_num, num))
+        # quantity_loss = tf.reduce_mean(tf.losses.mean_squared_error(_num, num))
+        quantity_loss = tf.reduce_mean(tf.math.pow(_num-num, 2))
 
         loss = ce_loss + quantity_loss * 1.0
 
@@ -130,6 +131,7 @@ def evaluate(feature, dataset, dev_size, assigner, model):
     num_processed = 0
     total_cer_dist = 0
     total_cer_len = 0
+    total_res_len = 0
     for batch in feature:
         uttids, x = batch
         # trans = dataset.get_attrs('trans', uttids.numpy(), args.max_label_len)
@@ -142,14 +144,16 @@ def evaluate(feature, dataset, dev_size, assigner, model):
         logits = model(l)
         preds = get_predicts(logits)
 
-        batch_cer_dist, batch_cer_len = batch_cer(preds.numpy(), trans)
+        batch_cer_dist, batch_cer_len, batch_res_len = batch_cer(preds.numpy(), trans)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
+        total_res_len += batch_res_len
 
         num_processed += len(x)
 
     cer = total_cer_dist/total_cer_len
-    print('dev PER: {:.3f}\t {} / {}'.format(cer, num_processed, dev_size))
+    over_fire_rate = total_res_len/total_cer_len
+    print('dev PER: {:.3f}\tover_fire_rate: {:.2f}\t {} / {}'.format(cer, over_fire_rate, num_processed, dev_size))
 
     return cer
 

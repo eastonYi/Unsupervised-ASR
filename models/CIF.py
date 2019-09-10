@@ -1,6 +1,5 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Input
-# from utils.tools import pad_list
 
 
 def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
@@ -47,8 +46,10 @@ def attentionAssign(args):
     x = input_x = Input(shape=[None, args.dim_input],
                         name='input_x')
     if args.model.attention.structure == 'bGRU':
-        for _ in range(1):
-            x = Bidirectional(GRU(args.model.attention.num_hidden/2, return_sequences=True))(x)
+        for _ in range(args.model.attention.num_layers):
+            x = Bidirectional(GRU(int(args.model.attention.num_hidden/2),
+                                  return_sequences=True,
+                                  dropout=args.model.attention.dropout))(x)
     elif args.model.attention.structure == 'conv':
         # x = tf.stack(tf.split(x, 3, -1), 3)
         for _ in range(3):
@@ -58,7 +59,8 @@ def attentionAssign(args):
             x = tf.keras.layers.ReLU()(x)
         x = Dense(args.model.attention.num_hidden, activation='relu')(x)
     hidden = x
-    x = Conv1D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
+    for _ in range(1):
+        x = Conv1D(args.model.attention.num_hidden, args.model.attention.filter_size)(x)
     # x = tf.keras.layers.LayerNormalization()(x)
     x = tf.keras.layers.ReLU()(x)
     alpha = Dense(1, activation='sigmoid')(x)[:, :, 0]
@@ -77,6 +79,11 @@ def PhoneClassifier(args, dim_input=None):
     if args.model.G.structure == 'fc':
         for _ in range(args.model.G.num_layers):
             x = Dense(args.model.G.num_hidden, activation='relu')(x)
+    elif args.model.G.structure == 'bGRU':
+        for _ in range(args.model.G.num_layers):
+            x = Bidirectional(GRU(int(args.model.G.num_hidden/2),
+                                  return_sequences=True,
+                                  dropout=args.model.G.dropout))(x)
 
     logits = Dense(args.dim_output, activation='linear')(x)
 

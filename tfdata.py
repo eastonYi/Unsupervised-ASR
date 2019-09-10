@@ -40,31 +40,31 @@ def main():
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    # feature_train.save('0')
-    # feature_dev.save('0')
-    # feature_train_supervise.save('0')
+    feature_train.save('0')
+    feature_dev.save('0')
+    feature_train_supervise.save('0')
 
-    dataset_train = ASR_align_DataSet(
-        trans_file=args.dirs.train.trans,
-        align_file=args.dirs.train.align,
-        uttid2wav=args.dirs.train.wav_scp,
-        feat_len_file=args.dirs.train.feat_len,
-        args=args,
-        _shuffle=False,
-        transform=True)
-    dataset_dev = ASR_align_DataSet(
-        trans_file=args.dirs.dev.trans,
-        uttid2wav=args.dirs.dev.wav_scp,
-        align_file=args.dirs.dev.align,
-        feat_len_file=args.dirs.dev.feat_len,
-        args=args,
-        _shuffle=False,
-        transform=True)
-    print(dataset_dev[0]['align'])
-    print(dataset_dev[0]['trans'])
-    print([dataset_dev.idx2token[i] for i in dataset_dev[0]['trans']])
-    import pdb; pdb.set_trace()
-    split_save()
+    # dataset_train = ASR_align_DataSet(
+    #     trans_file=args.dirs.train.trans,
+    #     align_file=args.dirs.train.align,
+    #     uttid2wav=args.dirs.train.wav_scp,
+    #     feat_len_file=args.dirs.train.feat_len,
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
+    # dataset_dev = ASR_align_DataSet(
+    #     trans_file=args.dirs.dev.trans,
+    #     uttid2wav=args.dirs.dev.wav_scp,
+    #     align_file=args.dirs.dev.align,
+    #     feat_len_file=args.dirs.dev.feat_len,
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
+    # print(dataset_dev[0]['align'])
+    # print(dataset_dev[0]['trans'])
+    # print([dataset_dev.idx2token[i] for i in dataset_dev[0]['trans']])
+    # import pdb; pdb.set_trace()
+    # split_save()
     # # for uttid_feature in feature_dev.read():
     # #     uttid, feature = uttid_feature
     # #     uttid = uttid.numpy()

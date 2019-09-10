@@ -3,7 +3,7 @@ dirs:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
         # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
         align: output/200_split_bGRU_len20.align
-        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gentrain_wav.scp
         tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_0_1_3
     train_supervise:
         trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
@@ -47,5 +47,5 @@ decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 300
+batch_size: 100
 num_supervised:

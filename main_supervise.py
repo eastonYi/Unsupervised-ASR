@@ -9,7 +9,7 @@ import tensorflow as tf
 from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import CE_loss, evaluate, monitor
+from utils.tools import CE_loss, evaluate, monitor, ctc_loss
 
 from models.GAN import PhoneClassifier
 # from models.GAN import PhoneClassifier2 as PhoneClassifier
@@ -58,9 +58,9 @@ def Train():
             supervise_uttids, supervise_x = next(iter(feature_train_supervise.take(args.num_supervised).\
                 padded_batch(args.num_supervised, ((), [None, args.dim_input]))))
             supervise_aligns = dataset_train_supervise.get_attrs('align', supervise_uttids.numpy())
-            supervise_bounds = dataset_train_supervise.get_attrs('bounds', supervise_uttids.numpy())
+            # supervise_bounds = dataset_train_supervise.get_attrs('bounds', supervise_uttids.numpy())
 
-        iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
+        iter_feature_train = iter(feature_train.repeat().shuffle(500).padded_batch(args.batch_size,
                 ((), [None, args.dim_input])).prefetch(buffer_size=5))
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
@@ -93,12 +93,13 @@ def Train():
             #     x, supervise_bounds, supervise_aligns, model, optimizer_G, args.dim_output)
         else:
             uttids, x = next(iter_feature_train)
-            aligns = dataset_train.get_attrs('align', uttids.numpy())
-            # trans = dataset_train.get_attrs('trans', uttids.numpy())
-            loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
+            # aligns = dataset_train.get_attrs('align', uttids.numpy())
+            trans = dataset_train.get_attrs('trans', uttids.numpy())
+            # loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
             # loss_supervise = train_G_TBTT_supervised(x, aligns, model, optimizer_G, args.dim_output)
             # bounds = dataset_train.get_attrs('bounds', uttids.numpy())
             # loss_supervise, bounds_loss = train_G_bounds_supervised(x, bounds, aligns, model, optimizer_G, args.dim_output)
+            loss_supervise = train_G_CTC_supervised(x, trans, model, optimizer_G)
 
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
@@ -202,6 +203,7 @@ def train_G_TBTT_supervised(x, labels, model, optimizer_G, dim_output):
 
     return gen_loss
 
+
 # @tf.function
 def train_G_bounds_supervised(x, bounds, labels, model, optimizer_G, dim_output):
     """
@@ -231,6 +233,20 @@ def train_G_bounds_supervised(x, bounds, labels, model, optimizer_G, dim_output)
     optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
 
     return gen_loss, bounds_loss
+
+
+# @tf.function
+def train_G_CTC_supervised(x, labels, model, optimizer_G):
+    with tf.GradientTape() as tape_G:
+        logits = model(x, training=True)
+        len_logits = tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(x), -1) > 0), tf.int32), -1)
+        len_labels = tf.reduce_sum(tf.cast(labels > 0, tf.int32), -1)
+        loss = ctc_loss(logits, len_logits, labels, len_labels)
+
+    gradients_G = tape_G.gradient(loss, model.trainable_variables)
+    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+
+    return loss
 
 
 if __name__ == '__main__':

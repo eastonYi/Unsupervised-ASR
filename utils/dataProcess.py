@@ -159,7 +159,8 @@ def process_raw_feature(fea, args):
         fea = add_delt(fea)
 
     # Splice
-    fea = splice(fea, left_num=args.data.num_context, right_num=args.data.num_context)
+    # fea = splice(fea, left_num=0, right_num=args.data.num_context)
+    fea = splice(fea, left_num=args.data.left_context, right_num=args.data.right_context)
 
     # downsample
     fea = down_sample(fea, rate=args.data.downsample)

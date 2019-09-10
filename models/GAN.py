@@ -35,7 +35,7 @@ def PhoneClassifier(args):
                                    return_sequences=True))(x)
     elif args.model.G.structure == 'bGRU':
         for _ in range(args.model.G.num_layers):
-            x = Bidirectional(GRU(args.model.G.num_hidden,
+            x = Bidirectional(GRU(int(args.model.G.num_hidden/2),
                                   return_sequences=True))(x)
     elif args.model.G.structure == 'fc+lstm':
         x_1 = input_x

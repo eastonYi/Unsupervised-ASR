@@ -1,0 +1,56 @@
+dirs:
+    exp: aishell
+    train:
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train.phone67.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train.phone67.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train_phone67_feats_13_3_2_3
+    train_supervise:
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train6000.phone67.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train6000.phone67.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train6000_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train6000_feats_13_3_2_3
+    dev:
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone67.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone67.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/dev_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_phone67_feats_13_3_2_3
+    test:
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/test.phone67.trans
+    type: csv
+    vocab: /home/user/easton/data/AISHELL/kaldi_gen/phones67.vocab
+
+data:
+    featType: mfcc
+    dim_raw_input: 13
+    left_context: 3
+    right_context: 3
+    downsample: 2
+    add_delta: True
+    unit: phone
+
+model:
+    G:
+        # structure: fc
+        # num_hidden: 512
+        # num_layers: 1
+        structure: bGRU
+        num_hidden: 256
+        num_layers: 1
+        # dropout: 0.5
+
+opti:
+    type: adam
+    lr: 0.0004
+
+dev_step: 200
+decode_step: 200
+save_step: 200
+
+gpus: '0'
+batch_size: 200
+num_supervised:
+num_batch_tokens: 80000
+bucket_boundaries: 238,300,372,437,800
+seed: 8
+lambda_fs: 0.0001

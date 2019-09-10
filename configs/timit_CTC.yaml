@@ -5,35 +5,36 @@ dirs:
         align: /home/user/easton/data/TIMIT/kaldi_gen/train.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train_wav.scp
         # tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats_13_3_3_3
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats_13_2_3_3
     train_supervise:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/train_200.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats_13_3_3_3
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats_13_2_3_3
     dev:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/test.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/test_wav.scp
-        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats_13_3_3_3
+        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats_13_2_3_3
     test:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
     type: csv
-    vocab: /home/user/easton/data/TIMIT/phone39.vocab
+    vocab: /home/user/easton/data/TIMIT/phone39+1.vocab
     # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
     # checkpoint: /home/user/easton/projects/EODM/exps/timit_supervised/bGRU_20_bound/checkpoint
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 3
+    left_context: 0
+    right_context: 2
     downsample: 3
     add_delta: True
     unit: phone
 
 model:
     G:
-        # structure: bGRU
+        structure: bGRU
         # structure: fc
         # num_hidden: 512
         # num_layers: 1
@@ -42,9 +43,9 @@ model:
         # num_hidden: 8
         # num_cell_hidden: 32
         # num_layers: 1
-        structure: fc
+        # structure: fc
         num_hidden: 512
-        num_layers: 1
+        num_layers: 2
 
 opti:
     type: adam
@@ -55,5 +56,5 @@ decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 100
+batch_size: 80
 num_supervised: 200

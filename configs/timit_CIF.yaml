@@ -1,41 +1,46 @@
 dirs:
+    exp: timit
     train:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text
-        wav_scp: /data/sxu/easton/data/TIMIT/train_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train_feats_13_2_3_3
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/train.trans
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats_13_2_3_3
     train_supervise:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/train/text_200
-        wav_scp: /data/sxu/easton/data/TIMIT/train200_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/train200_feats_13_2_3_3
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats_13_2_3_3
     dev:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
-        wav_scp: /data/sxu/easton/data/TIMIT/test_wav.scp
-        tfdata: /data/sxu/easton/data/TIMIT/tfdata/test_feats_13_2_3_3
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
+        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/test_wav.scp
+        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats_13_2_3_3
     test:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/data/test/text
+        trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
     type: csv
-    vocab: /data/sxu/easton/data/TIMIT/phone39.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_split_bGRU.align/checkpoint
+    vocab: /home/user/easton/data/TIMIT/phone39.vocab
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit_supervised/supervise_split_bGRU.align/checkpoint
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 2
+    left_context: 0
+    right_context: 2
     downsample: 3
     add_delta: True
     unit: phone
 
 model:
     attention:
-        # structure: bGRU
-        structure: conv
+        structure: bGRU
+        # structure: conv
         filter_size: 9
-        num_hidden: 128
+        num_layers: 2
+        num_hidden: 256
+        dropout: 0.1
         threshold: 0.95
     G:
         structure: fc
-        num_hidden: 512
+        num_hidden: 256
+        dropout: 0.0
         num_layers: 1
     D:
         num_hidden: 512

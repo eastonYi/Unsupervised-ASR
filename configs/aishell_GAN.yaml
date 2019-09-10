@@ -1,27 +1,26 @@
 dirs:
+    exp: aishell
     train:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/text
-        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/tri3_ali/train.phone.frame
-        # align: /data/sxu/easton/projects/kaldi-2019/egs/timit/try1/exp/iter1_ali/train.phone.frame
-        align:
-        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/wav.scp
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_feats_13_5_1_3
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train_feats_13_5_2_3
     train_supervise:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/text
-        align: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/exp/tri5a_ali/train.phone.frame
-        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/train/wav.scp
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/train_feats_13_5_1_3
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/train6000.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/train6000.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/train6000_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/train6000_feats_13_5_2_3
     dev:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/dev/text
-        align: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/exp/tri5a_dev_ali/dev.phone.frame
-        wav_scp: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/dev/wav.scp
-        tfdata: /data/sxu/easton/data/AISHELL/tfdata/dev_feats_13_5_1_3
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/dev.trans
+        align: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone.frame
+        wav_scp: /home/user/easton/data/AISHELL/kaldi_gen/dev_wav.scp
+        tfdata: /home/user/easton/data/AISHELL/tfdata/dev_feats_13_5_2_3
     test:
-        trans: /data/sxu/easton/projects/kaldi-2019/egs/aishell/s5/data/test/text
+        trans: /home/user/easton/data/AISHELL/kaldi_gen/test.trans
     lm:
-        data: /data/sxu/easton/data/AISHELL/train_phone.txt
+        data: /home/user/easton/data/AISHELL/kaldi_gen/train.txt
     type: csv
-    vocab: /data/sxu/easton/data/AISHELL/phones.txt
+    vocab: /home/user/easton/data/AISHELL/kaldi_gen/phones217.vocab
     # checkpoint:
 
 data:
