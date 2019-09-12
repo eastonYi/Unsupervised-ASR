@@ -2,7 +2,7 @@
 # coding=utf-8
 from utils.tools import TFData
 from utils.arguments import args
-from utils.dataset import ASR_align_DataSet
+from utils.dataset import ASR_align_DataSet, get_bucket
 from pathlib import Path
 
 
@@ -40,9 +40,11 @@ def main():
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    feature_train.save('0')
-    feature_dev.save('0')
-    feature_train_supervise.save('0')
+    # feature_train.save('0')
+    # feature_dev.save('0')
+    # feature_train_supervise.save('0')
+
+    # get_bucket(args.dirs.train.tfdata / 'feature_length.txt', args.num_batch_tokens, 50)
 
     # dataset_train = ASR_align_DataSet(
     #     trans_file=args.dirs.train.trans,

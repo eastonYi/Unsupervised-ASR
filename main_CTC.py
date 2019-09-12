@@ -19,23 +19,23 @@ tf.random.set_seed(args.seed)
 
 
 def Train():
-    dataset_train = ASR_align_DataSet(
-        trans_file=args.dirs.train.trans,
-        align_file=args.dirs.train.align,
-        uttid2wav=args.dirs.train.wav_scp,
-        feat_len_file=args.dirs.train.feat_len,
-        args=args,
-        _shuffle=True,
-        transform=True)
-    dataset_dev = ASR_align_DataSet(
-        trans_file=args.dirs.dev.trans,
-        align_file=args.dirs.dev.align,
-        uttid2wav=args.dirs.dev.wav_scp,
-        feat_len_file=args.dirs.dev.feat_len,
-        args=args,
-        _shuffle=False,
-        transform=True)
     with tf.device("/cpu:0"):
+        dataset_train = ASR_align_DataSet(
+            trans_file=args.dirs.train.trans,
+            align_file=args.dirs.train.align,
+            uttid2wav=args.dirs.train.wav_scp,
+            feat_len_file=args.dirs.train.feat_len,
+            args=args,
+            _shuffle=True,
+            transform=True)
+        dataset_dev = ASR_align_DataSet(
+            trans_file=args.dirs.dev.trans,
+            align_file=args.dirs.dev.align,
+            uttid2wav=args.dirs.dev.wav_scp,
+            feat_len_file=args.dirs.dev.feat_len,
+            args=args,
+            _shuffle=False,
+            transform=True)
         # wav data
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
@@ -43,8 +43,14 @@ def Train():
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read()
-        iter_feature_train = iter(feature_train.repeat().shuffle(500).padded_batch(args.batch_size,
-                ((), [None, args.dim_input])).prefetch(buffer_size=5))
+        bucket = tf.data.experimental.bucket_by_sequence_length(
+            element_length_func=lambda uttid, x: tf.shape(x)[0],
+            bucket_boundaries=args.list_bucket_boundaries,
+            bucket_batch_sizes=args.list_batch_size,
+            padded_shapes=((), [None, args.dim_input]))
+        iter_feature_train = iter(feature_train.repeat().shuffle(500).apply(bucket).prefetch(buffer_size=5))
+        # iter_feature_train = iter(feature_train.repeat().shuffle(500).padded_batch(args.batch_size,
+        #         ((), [None, args.dim_input])).prefetch(buffer_size=5))
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
     # create model paremeters

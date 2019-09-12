@@ -42,9 +42,10 @@ model:
         # num_hidden: 8
         # num_cell_hidden: 32
         # num_layers: 1
-        structure: fc
-        num_hidden: 512
-        num_layers: 1
+        structure: self-attention
+        num_hidden: 256
+        num_layers: 3
+        num_heads: 8
 
 opti:
     type: adam

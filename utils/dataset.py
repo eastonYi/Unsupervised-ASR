@@ -8,12 +8,14 @@ from tqdm import tqdm
 from random import shuffle, random, randint
 import multiprocessing
 import tensorflow as tf
+from pathlib import Path
 from abc import ABCMeta, abstractmethod
 
 from .dataProcess import audio2vector, get_audio_length, process_raw_feature
 from .tools import align2stamp, align2bound
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
+
 
 class DataSet:
     __metaclass__ = ABCMeta
@@ -206,6 +208,67 @@ class ASR_align_DataSet(ASRDataSet):
         align = align.split()
 
         return int(np.round(len(align)/len(feat)))
+
+
+class ASR_classify_DataSet(ASRDataSet):
+
+    def __init__(self, dir_wavs, class_file, args, _shuffle, transform):
+        super().__init__(class_file, args, _shuffle, transform)
+        self.dict_wavs = self.load_wav(dir_wavs)
+        self.dict_y, self.dict_class = self.load_y(class_file)
+        self.list_uttids = list(self.dict_y.keys())
+
+        if _shuffle:
+            shuffle(self.list_uttids)
+
+    def __getitem__(self, id):
+        uttid = self.list_uttids[id]
+        wav = self.dict_wavs[uttid]
+        feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+        if self.transform:
+            feat = process_raw_feature(feat, self.args)
+
+        y = self.dict_y[uttid]
+
+        sample = {'uttid': uttid,
+                  'feature': feat,
+                  'class': y}
+
+        return sample
+
+    def load_y(self, class_file):
+        dict_y = {}
+        dict_class = {}
+        with open(class_file) as f:
+            for line in f:
+                uttid, y = line.strip().split()
+                if y not in dict_class.keys():
+                    dict_class[y] = len(dict_class)
+                dict_y[uttid] = dict_class[y]
+
+        return dict_y, dict_class
+
+    def get_y(self, uttids):
+        list_y = []
+        for uttid in uttids:
+            if type(uttid) == bytes:
+                uttid = uttid.decode('utf-8')
+            y = self.dict_y[uttid]
+            list_y.append(y)
+
+        return np.array(list_y, np.int32)
+
+    def load_wav(self, dir_wavs):
+        dict_wavs = {}
+        wav_path = Path(dir_wavs)
+        for wav_file in wav_path.glob('*.wav'):
+            uttid = str(wav_file.name)[:-4]
+            dict_wavs[uttid] = str(wav_file)
+
+        return dict_wavs
+
+    def __len__(self):
+        return len(self.list_uttids)
 
 
 class LMDataSet(DataSet):
@@ -468,3 +531,53 @@ def get_batch(iterator, batch_size, length):
         list_samples.append(sample[:length])
         if len(list_samples) >= batch_size:
             return np.array(list_samples, dtype=np.int32)
+
+
+def get_bucket(length_file, num_batch_tokens, idx_init=150):
+    """
+    enlarge idx_init can shrink the num of buckets
+    """
+    print('get the dataset info')
+    list_len = []
+    with open(length_file) as f:
+        for line in f:
+            length = int(line.strip().split()[1])
+            list_len.append(length)
+
+    hist, edges = np.histogram(list_len, bins=(max(list_len)-min(list_len)+1))
+    list_num = []
+    list_length = []
+    for num, edge in zip(hist, edges):
+        list_num.append(int(num))
+        list_length.append(int(np.ceil(edge)))
+
+    def next_idx(idx, energy):
+        for i in range(idx, len(list_num), 1):
+            if list_length[i]*sum(list_num[idx+1:i+1]) > energy:
+                return i-1
+        return
+
+    M = num_batch_tokens
+    b0 = int(M / list_length[idx_init])
+    k = b0/sum(list_num[:idx_init+1])
+    energy = M/k
+
+    list_batchsize = [b0]
+    list_boundary = [list_length[idx_init]]
+
+    idx = idx_init
+    while idx < len(list_num):
+        idx = next_idx(idx, energy)
+        if not idx:
+            break
+        if idx == idx_init:
+            print('enlarge the idx_init!')
+            break
+        list_boundary.append(list_length[idx])
+        list_batchsize.append(int(M / list_length[idx]))
+
+    list_boundary.append(list_length[-1])
+    list_batchsize.append(int(M/list_length[-1]))
+
+    print('suggest boundaries: \n{}'.format(','.join(map(str, list_boundary))))
+    print('corresponding batch size: \n{}'.format(','.join(map(str, list_batchsize))))

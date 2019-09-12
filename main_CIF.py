@@ -7,10 +7,9 @@ import tensorflow as tf
 import numpy as np
 
 from utils.arguments import args
-from utils.dataset import ASR_align_DataSet, TextDataSet
-from utils.tools import TFData, gradient_penalty, CE_loss, decode, get_predicts, batch_cer
+from utils.dataset import ASR_align_DataSet
+from utils.tools import TFData, CE_loss, get_predicts, batch_cer
 
-# from models.GAN import PhoneClassifier, PhoneDiscriminator3
 from models.CIF import attentionAssign, CIF, PhoneClassifier
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.random.set_seed(args.seed)
@@ -44,7 +43,6 @@ def train():
                 ((), [None, args.dim_input])).prefetch(buffer_size=5))
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
-
     # create model paremeters
     assigner = attentionAssign(args)
     G = PhoneClassifier(args, dim_input=args.model.attention.num_hidden)
@@ -74,14 +72,14 @@ def train():
 
         uttids, x = next(iter_feature_train)
         y = dataset_train.get_attrs('trans', uttids.numpy())
-        ce_loss_supervise, quantity_loss_supervise = train_G_supervised(
+        ce_loss_supervise, quantity_loss_supervise, _ctc_loss = train_G_supervised(
             x, y, assigner, G, optimizer_G, args.dim_output, args.lambda_supervision)
 
         num_processed += len(x)
         progress = num_processed / args.data.train_size
         if step % 10 == 0:
-            print('loss_supervise: {:.3f}|{:.3f}\tbatch: {}|{}\tused: {:.3f}\t {:.3f}% iter: {}'.format(
-                   ce_loss_supervise, quantity_loss_supervise, x.shape, None, time()-start, progress*100.0, step))
+            print('loss_supervise: {:.3f}|{:.3f}|{:.3f}\tbatch: {}|{}\tused: {:.3f}\t {:.3f}% iter: {}'.format(
+                   ce_loss_supervise, quantity_loss_supervise, _ctc_loss, x.shape, None, time()-start, progress*100.0, step))
             # with writer.as_default():
             #     tf.summary.scalar("costs/cost_G", cost_G, step=step)
             #     tf.summary.scalar("costs/cost_D", cost_D, step=step)
@@ -103,9 +101,17 @@ def train():
 def train_G_supervised(x, y, assigner, G, optimizer, dim_output, lambda_supervision):
     vars = G.trainable_variables + assigner.trainable_variables
     with tf.GradientTape() as tape:
-        hidden, alpha = assigner(x)
-        musk = tf.cast(tf.reduce_sum(tf.abs(x), -1) > 0, tf.float32)
+        hidden, _, alpha = assigner(x)
+
+        # len_logits = get_x_len(x)
+        # len_labels = tf.reduce_sum(tf.cast(y > 0, tf.int32), -1)
+        # _ctc_loss = ctc_loss(logits1, len_logits, y, len_labels)
+        # _ctc_loss = tf.reduce_mean(_ctc_loss)
+        _ctc_loss = 0
+
+        musk = tf.cast(tf.reduce_max(tf.abs(x), -1) > 0, tf.float32)
         alpha *= musk
+        hidden *= tf.tile(musk[:,:, None], [1, 1, args.model.attention.num_hidden])
         # sum
         _num = tf.reduce_sum(alpha, -1)
         # scaling
@@ -116,15 +122,59 @@ def train_G_supervised(x, y, assigner, G, optimizer, dim_output, lambda_supervis
         logits= G(l, training=True)
         ce_loss = CE_loss(logits, y, dim_output, confidence=0.8)
 
-        # quantity_loss = tf.reduce_mean(tf.losses.mean_squared_error(_num, num))
         quantity_loss = tf.reduce_mean(tf.math.pow(_num-num, 2))
 
-        loss = ce_loss + quantity_loss * 1.0
+        loss = ce_loss + quantity_loss * 1.0 + _ctc_loss * 1.0
+        # loss = _ctc_loss * 1.0
 
     gradients = tape.gradient(loss, vars)
     optimizer.apply_gradients(zip(gradients, vars))
 
-    return ce_loss, quantity_loss
+    return ce_loss, quantity_loss, _ctc_loss
+
+
+def get_x_len(x):
+
+    return tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(x), -1) > 0), tf.int32), -1)
+
+
+def ctc_loss(logits, len_logits, labels, len_labels):
+    """
+    No valid path found: It is possible that no valid path is found if the
+    activations for the targets are zero.
+    """
+    # ctc_loss = tf.nn.ctc_loss(labels, logits, len_labels, len_logits, logits_time_major=False)
+    ctc_loss = tf.nn.ctc_loss(
+        labels,
+        logits,
+        label_length=len_labels,
+        logit_length=len_logits,
+        logits_time_major=False)
+
+    return ctc_loss
+
+
+def ctc_decode(logits, len_logits, beam_size=1):
+    logits_timeMajor = tf.transpose(logits, [1, 0, 2])
+
+    if beam_size == 1:
+        decoded_sparse = tf.cast(tf.nn.ctc_greedy_decoder(
+            logits_timeMajor,
+            len_logits,
+            merge_repeated=True)[0][0], tf.int32)
+    else:
+        decoded_sparse = tf.cast(tf.nn.ctc_beam_search_decoder(
+            logits_timeMajor,
+            len_logits,
+            beam_width=beam_size,
+            merge_repeated=True)[0][0], tf.int32)
+
+    preds = tf.sparse.to_dense(
+        decoded_sparse,
+        default_value=0,
+        validate_indices=True)
+
+    return preds
 
 
 def evaluate(feature, dataset, dev_size, assigner, model):
@@ -137,12 +187,14 @@ def evaluate(feature, dataset, dev_size, assigner, model):
         # trans = dataset.get_attrs('trans', uttids.numpy(), args.max_label_len)
         trans = dataset.get_attrs('trans', uttids.numpy())
 
-        hidden, alpha = assigner(x)
+        hidden, _, alpha = assigner(x)
         musk = tf.cast(tf.reduce_sum(tf.abs(x), -1) > 0, tf.float32)
         alpha *= musk
         l = CIF(hidden, alpha, threshold=args.model.attention.threshold)
         logits = model(l)
         preds = get_predicts(logits)
+        # len_logits = get_x_len(x)
+        # preds = ctc_decode(logits1, len_logits)
 
         batch_cer_dist, batch_cer_len, batch_res_len = batch_cer(preds.numpy(), trans)
         total_cer_dist += batch_cer_dist
@@ -160,12 +212,15 @@ def evaluate(feature, dataset, dev_size, assigner, model):
 
 def monitor(sample, assigner, model):
     x = np.array([sample['feature']], dtype=np.float32)
-    hidden, alpha = assigner(x)
-    # l = CIF(x, alpha, threshold=args.model.G.threshold, max_label_len=args.max_label_len)
-    l = CIF(hidden, alpha, threshold=args.model.attention.threshold)
+    # logits = model(x)
+    # hidden, logits1, alpha = assigner(x)
+    # len_logits = get_x_len(x)
+    # preds = ctc_decode(logits1, len_logits)
+    hidden, _, alpha = assigner(x)
+    l = CIF(hidden, alpha, threshold=args.model.attention.threshold, log=False)
     logits = model(l)
-    predicts = get_predicts(logits)
-    print('predicts: \n', predicts.numpy()[0])
+    preds = get_predicts(logits)
+    print('predicts: \n', preds.numpy()[0])
     print('trans: \n', sample['trans'])
 
 

@@ -1,0 +1,35 @@
+dirs:
+    exp: tdt4
+    wav: /home/user/easton/data/TDT4/wav
+    train:
+        label: /home/user/easton/data/TDT4/train
+        tfdata: /home/user/easton/data/TDT4/tfdata/train
+    dev:
+        label: /home/user/easton/data/TDT4/dev
+        tfdata: /home/user/easton/data/TDT4/tfdata/dev
+    test:
+        label: /home/user/easton/data/TDT4/dev
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_CTC/CTC/checkpoint
+
+data:
+    featType: mfcc
+    dim_raw_input: 13
+    left_context: 0
+    right_context: 2
+    downsample: 3
+    add_delta: True
+    unit: phone
+
+opti:
+    type: adam
+    lr: 0.0002
+
+dev_step: 100
+decode_step: 100
+save_step: 100
+
+gpus: '0'
+batch_size: 80
+
+num_batch_tokens: 1000
+bucket_boundaries: 81,93,105,118,138,178,260

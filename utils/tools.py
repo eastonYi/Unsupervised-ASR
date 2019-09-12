@@ -463,6 +463,7 @@ def compute_ppl(logits, labels):
 
 
 def CE_loss(logits, labels, vocab_size, confidence=0.9):
+    get_preds_ngram
     mask = tf.cast(labels>0, dtype=tf.float32)
 
     low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)

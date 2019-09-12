@@ -29,6 +29,16 @@ args = AttrDict(yaml.load(open(CONFIG_FILE), Loader=yaml.SafeLoader))
 args.num_gpus = len(args.gpus.split(','))
 args.list_gpus = ['/gpu:{}'.format(i) for i in range(args.num_gpus)]
 
+# bucket
+if args.bucket_boundaries:
+    args.list_bucket_boundaries = [int(i) for i in args.bucket_boundaries.split(',')]
+
+assert args.num_batch_tokens
+args.list_batch_size = ([int(args.num_batch_tokens / boundary) * args.num_gpus
+        for boundary in (args.list_bucket_boundaries)] + [args.num_gpus])
+logging.info('\nbucket_boundaries: {} \nbatch_size: {}'.format(
+    args.list_bucket_boundaries, args.list_batch_size))
+
 # dirs
 dir_dataInfo = Path.cwd() / 'data'
 dir_exps = Path.cwd() / 'exps' / args.dirs.exp

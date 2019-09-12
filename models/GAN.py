@@ -54,10 +54,21 @@ def PhoneClassifier(args):
         x = Dense(args.model.G.num_fc_hidden, activation='relu')(x)
         x = Dense(args.model.G.num_hidden, activation='linear')(x)
         x = Bidirectional(GRU(args.model.G.num_cell_hidden, return_sequences=True))(x)
+    elif args.model.G.structure == 'self-attention':
+        from .SelfAttentionModel import SelfAttention
+
+        mask = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
+        x = SelfAttention(
+            num_layers=args.model.G.num_layers,
+            d_model=args.model.G.num_hidden,
+            num_heads=args.model.G.num_heads,
+            dff=args.model.G.num_hidden,
+            input_vocab_size=args.dim_output,
+            rate=args.model.G.dropout)(x, mask=mask)
 
     logits = Dense(args.dim_output, activation='linear')(x)
-    musk = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
-    logits *= musk[:, :, None]
+    mask = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
+    logits *= mask[:, :, None]
 
     model = tf.keras.Model(inputs=input_x,
                            outputs=logits,
@@ -100,9 +111,9 @@ def PhoneClassifier2(args):
 
         x = tf.concat([x_1, x_2], -1)
 
-    musk = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
+    mask = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
     logits = Dense(args.dim_output, activation='linear')(x)
-    logits *= musk[:, :, None]
+    logits *= mask[:, :, None]
 
     logits2 = Dense(2, activation='linear')(x)
     model = tf.keras.Model(inputs=input_x,

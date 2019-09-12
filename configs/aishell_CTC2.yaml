@@ -18,7 +18,8 @@ dirs:
     test:
         trans: /home/user/easton/data/AISHELL/kaldi_gen/test.trans
     type: csv
-    vocab: /home/user/easton/data/AISHELL/kaldi_gen/phones217.vocab
+    vocab: /home/user/easton/data/AISHELL/kaldi_gen/phones217+1.vocab
+    checkpoint: /home/user/easton/projects/EODM/exps/aishell/aishell_CTC2/bGRU_217/checkpoint
 
 data:
     featType: mfcc
@@ -37,7 +38,7 @@ model:
         structure: bGRU
         num_hidden: 256
         num_layers: 2
-        dropout: 0.2
+        # dropout: 0.5
 
 opti:
     type: adam
@@ -48,9 +49,9 @@ decode_step: 200
 save_step: 200
 
 gpus: '0'
-batch_size: 100
+batch_size: 30
 num_supervised:
-num_batch_tokens: 80000
-bucket_boundaries: 161,182,202,223,245,269,297,334,423,726
+num_batch_tokens: 15000
+bucket_boundaries: 161,182,202,223,245,269,297,334,423,726,1000
 seed: 8
 lambda_fs: 0.0001

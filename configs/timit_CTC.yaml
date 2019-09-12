@@ -20,8 +20,7 @@ dirs:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
     type: csv
     vocab: /home/user/easton/data/TIMIT/phone39+1.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/supervise_200_split_bGRU/checkpoint
-    # checkpoint: /home/user/easton/projects/EODM/exps/timit_supervised/bGRU_20_bound/checkpoint
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_CTC/CTC/checkpoint
 
 data:
     featType: mfcc
@@ -34,7 +33,7 @@ data:
 
 model:
     G:
-        structure: bGRU
+        # structure: bGRU
         # structure: fc
         # num_hidden: 512
         # num_layers: 1
@@ -44,8 +43,13 @@ model:
         # num_cell_hidden: 32
         # num_layers: 1
         # structure: fc
-        num_hidden: 512
-        num_layers: 2
+        # num_hidden: 512
+        # num_layers: 2
+        structure: self-attention
+        num_hidden: 256
+        num_layers: 3
+        num_heads: 8
+        dropout: 0.1
 
 opti:
     type: adam
@@ -58,3 +62,6 @@ save_step: 100
 gpus: '0'
 batch_size: 80
 num_supervised: 200
+
+num_batch_tokens: 1000
+bucket_boundaries: 81,93,105,118,138,178,260
