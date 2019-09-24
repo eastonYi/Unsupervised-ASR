@@ -34,14 +34,14 @@ def main():
     feature_train = TFData(dataset=dataset_train,
                     dir_save=args.dirs.train.tfdata,
                     args=args)
-    feature_train_supervise = TFData(dataset=dataset_train_supervise,
-                    dir_save=args.dirs.train_supervise.tfdata,
-                    args=args)
+    # feature_train_supervise = TFData(dataset=dataset_train_supervise,
+    #                 dir_save=args.dirs.train_supervise.tfdata,
+    #                 args=args)
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    # feature_train.save('0')
-    # feature_dev.save('0')
+    feature_train.save('0')
+    feature_dev.save('0')
     # feature_train_supervise.save('0')
 
     # get_bucket(args.dirs.train.tfdata / 'feature_length.txt', args.num_batch_tokens, 50)

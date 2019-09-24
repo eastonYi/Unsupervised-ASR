@@ -7,6 +7,7 @@ from random import shuffle
 import hashlib
 import math
 from time import time
+from struct import pack, unpack
 
 
 def mkdirs(filename):
@@ -85,6 +86,49 @@ class TFData:
             fw.write('damaged samples: {}\n'.format(num_damaged_sample))
 
         return
+
+    def split_save(self, length_file='feature_length.txt', capacity=50000):
+        num_token = 0
+        num_damaged_sample = 0
+        fw = open(self.dir_save/length_file, 'w')
+        def serialize_example(uttid, feature):
+            atts = {
+                'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
+                'feature': self._bytes_feature(feature.tostring())
+            }
+            example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
+
+            return example_proto.SerializeToString()
+
+        def generator():
+            nonlocal fw, i, capacity
+            # for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+            for j in tqdm(range(i*capacity, (i+1)*capacity)):
+                sample = self.dataset[j]
+                line = sample['uttid'] + ' ' + str(len(sample['feature']))
+                fw.write(line + '\n')
+                yield serialize_example(sample['uttid'], sample['feature'])
+
+        for i in range(len(self.dataset)//capacity + 1):
+            dataset_tf = tf.data.Dataset.from_generator(
+                generator=generator,
+                output_types=tf.string,
+                output_shapes=())
+
+            record_file = self.dir_save/'{}.recode'.format(i)
+            mkdirs(record_file)
+            writer = tf.data.experimental.TFRecordWriter(str(record_file))
+            writer.write(dataset_tf)
+
+        with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
+            fw.write('data_file {}\n'.format(self.dataset.file))
+            fw.write('dim_feature {}\n'.format(self.dim_feature))
+            fw.write('num_tokens {}\n'.format(num_token))
+            fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
+            fw.write('damaged samples: {}\n'.format(num_damaged_sample))
+
+        return
+
 
     def read(self, _shuffle=False):
         """
@@ -485,7 +529,7 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     return loss
 
 
-def evaluate(feature, dataset, dev_size, model, beam_size=0, with_stamp=True):
+def evaluate(feature, dataset, dev_size, model, beam_size=0, with_stamp=True, wfst=None):
     list_acc = []
 
     num_processed = 0
@@ -499,25 +543,31 @@ def evaluate(feature, dataset, dev_size, model, beam_size=0, with_stamp=True):
         aligns = dataset.get_attrs('align', uttids.numpy())
         trans = dataset.get_attrs('trans', uttids.numpy())
 
-        if with_stamp:
-            stamps = dataset.get_attrs('stamps', uttids.numpy())
-            indices = stamps2indices(stamps, 'middle')
-            _logits = tf.gather_nd(logits, indices)
-            preds = get_predicts(_logits)
-        else:
-            if beam_size > 0:
-                preds = beam_search_MAP(logits, beam_size) # actually is align
-                acc = align_accuracy(preds, aligns)
-            else:
-                preds = get_predicts(logits)
+        if not wfst:
+            if with_stamp:
+                stamps = dataset.get_attrs('stamps', uttids.numpy())
+                indices = stamps2indices(stamps, 'middle')
+                _logits = tf.gather_nd(logits, indices)
+                preds = get_predicts(_logits)
                 acc = align_accuracy(logits, aligns)
-            # bounds = get_predicts(logits_bounds)
-            # stamps = bounds2stamps(bounds)
-            # indices = stamps2indices(stamps, 'middle')
-            # _logits = tf.gather_nd(logits, indices)
-            # preds = get_predicts(_logits)
+            else:
+                if beam_size > 0:
+                    preds = beam_search_MAP(logits, beam_size) # actually is align
+                    acc = align_accuracy(preds, aligns)
+                else:
+                    preds = get_predicts(logits)
+                    acc = align_accuracy(logits, aligns)
+                # bounds = get_predicts(logits_bounds)
+                # stamps = bounds2stamps(bounds)
+                # indices = stamps2indices(stamps, 'middle')
+                # _logits = tf.gather_nd(logits, indices)
+                # preds = get_predicts(_logits)
+                # acc = align_accuracy(logits, aligns)
+        else:
+            distribution = tf.nn.softmax(logits)
+            decoded = wfst.decode(distribution)
+            acc = align_accuracy(decoded, aligns)
 
-        acc = align_accuracy(logits, aligns)
         list_acc.append(acc)
 
         batch_cer_dist, batch_cer_len, batch_res_len = batch_cer(preds.numpy(), trans)
@@ -749,3 +799,173 @@ def beam_search_MAP(logits, beam_size=20, lp=50.0):
     # tf.stack(predicts, 0)
 
     return aligns
+
+
+def store_2d(array, fw):
+    fw.write(pack('I', len(array)))
+    for i, distrib in enumerate(array):
+        for p in distrib:
+            p = pack('f', p)
+            fw.write(p)
+
+
+class ArkReader(object):
+    '''
+    Class to read Kaldi ark format. Each time, it reads one line of the .scp
+    file and reads in the corresponding features into a numpy matrix. It only
+    supports binary-formatted .ark files. Text and compressed .ark files are not
+    supported. The inspiration for this class came from pdnn toolkit (see
+    licence at the top of this file) (https://github.com/yajiemiao/pdnn)
+    '''
+
+    def __init__(self, scp_path):
+        '''
+        ArkReader constructor
+
+        Args:
+            scp_path: path to the .scp file
+        '''
+
+        self.scp_position = 0
+        fin = open(scp_path, "r", errors='ignore')
+        self.utt_ids = []
+        self.scp_data = []
+        line = fin.readline()
+        while line != '' and line != None:
+            utt_id, path_pos = line.replace('\n', '').split(' ')
+            path, pos = path_pos.split(':')
+            self.utt_ids.append(utt_id)
+            self.scp_data.append((path, pos))
+            line = fin.readline()
+
+        fin.close()
+
+    def read_utt_data(self, index):
+        '''
+        read data from the archive
+
+        Args:
+            index: index of the utterance that will be read
+
+        Returns:
+            a numpy array containing the data from the utterance
+        '''
+
+        ark_read_buffer = open(self.scp_data[index][0], 'rb')
+        ark_read_buffer.seek(int(self.scp_data[index][1]), 0)
+        header = unpack('<xcccc', ark_read_buffer.read(5))
+        if header[0] != b"B":
+            print("Input .ark file is not binary")
+            exit(1)
+        if header == (b'B', b'C', b'M', b' '):
+            # print('enter BCM')
+            g_min_value, g_range, g_num_rows, g_num_cols = unpack('ffii', ark_read_buffer.read(16))
+            utt_mat = np.zeros([g_num_rows, g_num_cols], dtype=np.float32)
+            #uint16 percentile_0; uint16 percentile_25; uint16 percentile_75; uint16 percentile_100;
+            per_col_header = []
+            for i in range(g_num_cols):
+                per_col_header.append(unpack('HHHH', ark_read_buffer.read(8)))
+                #print per_col_header[i]
+
+            tmp_mat = np.frombuffer(ark_read_buffer.read(g_num_rows * g_num_cols), dtype=np.uint8)
+
+            pos = 0
+            for i in range(g_num_cols):
+                p0 = float(g_min_value + g_range * per_col_header[i][0] / 65535.0)
+                p25 = float(g_min_value + g_range * per_col_header[i][1] / 65535.0)
+                p75 = float(g_min_value + g_range * per_col_header[i][2] / 65535.0)
+                p100 = float(g_min_value + g_range * per_col_header[i][3] / 65535.0)
+
+                d1 = float((p25 - p0) / 64.0)
+                d2 = float((p75 - p25) / 128.0)
+                d3 = float((p100 - p75) / 63.0)
+                for j in range(g_num_rows):
+                    c = tmp_mat[pos]
+                    if c <= 64:
+                        utt_mat[j][i] = p0 + d1 * c
+                    elif c <= 192:
+                        utt_mat[j][i] = p25 + d2 * (c - 64)
+                    else:
+                        utt_mat[j][i] = p75 + d3 * (c - 192)
+                    pos += 1
+        elif header == (b'B', b'F', b'M', b' '):
+            # print('enter BFM')
+            m, rows = unpack('<bi', ark_read_buffer.read(5))
+            n, cols = unpack('<bi', ark_read_buffer.read(5))
+            tmp_mat = np.frombuffer(ark_read_buffer.read(rows * cols * 4), dtype=np.float32)
+            utt_mat = np.reshape(tmp_mat, (rows, cols))
+
+        ark_read_buffer.close()
+
+        return utt_mat
+
+    def read_next_utt(self):
+        '''
+        read the next utterance in the scp file
+
+        Returns:
+            the utterance ID of the utterance that was read, the utterance data,
+            bool that is true if the reader looped back to the beginning
+        '''
+
+        if len(self.scp_data) == 0:
+            return None, None, True
+
+        #if at end of file loop around
+        if self.scp_position >= len(self.scp_data):
+            looped = True
+            self.scp_position = 0
+        else:
+            looped = False
+
+        self.scp_position += 1
+
+        return (self.utt_ids[self.scp_position-1],
+                self.read_utt_data(self.scp_position-1), looped)
+
+    def read_next_scp(self):
+        '''
+        read the next utterance ID but don't read the data
+
+        Returns:
+            the utterance ID of the utterance that was read
+        '''
+
+        #if at end of file loop around
+        if self.scp_position >= len(self.scp_data):
+            self.scp_position = 0
+
+        self.scp_position += 1
+
+        return self.utt_ids[self.scp_position-1]
+
+    def read_previous_scp(self):
+        '''
+        read the previous utterance ID but don't read the data
+
+        Returns:
+            the utterance ID of the utterance that was read
+        '''
+
+        if self.scp_position < 0: #if at beginning of file loop around
+            self.scp_position = len(self.scp_data) - 1
+
+        self.scp_position -= 1
+
+        return self.utt_ids[self.scp_position+1]
+
+    def read_utt(self, utt_id):
+        '''
+        read the data of a certain utterance ID
+
+        Returns:
+            the utterance data corresponding to the ID
+        '''
+
+        return self.read_utt_data(self.utt_ids.index(utt_id))
+
+    def split(self):
+        '''Split of the data that was read so far'''
+
+        self.scp_data = self.scp_data[self.scp_position:-1]
+        self.utt_ids = self.utt_ids[self.scp_position:-1]

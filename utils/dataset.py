@@ -271,6 +271,52 @@ class ASR_classify_DataSet(ASRDataSet):
         return len(self.list_uttids)
 
 
+class ASR_classify_ArkDataSet(ASRDataSet):
+
+    def __init__(self, scp_file, class_file, args, _shuffle, transform):
+        super().__init__(class_file, args, _shuffle, transform)
+        from .tools import ArkReader
+        self.reader = ArkReader(scp_file)
+        self.dict_y, self.dict_class = self.load_y(class_file)
+        self.list_uttids = list(self.dict_y.keys())
+
+    def __getitem__(self, id):
+        uttid = self.list_uttids[id]
+        feat = self.reader.read_utt_data(id)
+        y = self.dict_y[uttid]
+
+        sample = {'uttid': uttid,
+                  'feature': feat,
+                  'class': y}
+
+        return sample
+
+    def load_y(self, class_file):
+        dict_y = {}
+        dict_class = {}
+        with open(class_file) as f:
+            for line in f:
+                uttid, y = line.strip().split()
+                if y not in dict_class.keys():
+                    dict_class[y] = len(dict_class)
+                dict_y[uttid] = dict_class[y]
+
+        return dict_y, dict_class
+
+    def get_y(self, uttids):
+        list_y = []
+        for uttid in uttids:
+            if type(uttid) == bytes:
+                uttid = uttid.decode('utf-8')
+            y = self.dict_y[uttid]
+            list_y.append(y)
+
+        return np.array(list_y, np.int32)
+
+    def __len__(self):
+        return len(self.list_uttids)
+
+
 class LMDataSet(DataSet):
     """
     dataset for language model. Refer to the PTB dataset

@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 
 from utils.tools import TFData, mkdirs
-from utils.dataset import ASR_classify_DataSet
+from utils.dataset import ASR_classify_ArkDataSet
 from utils.tools import CE_loss
 
 
@@ -86,37 +86,37 @@ def Classifier(args):
 
 
 def Train():
-    dataset_train = ASR_classify_DataSet(
-        dir_wavs=args.dirs.wav,
+    dataset_train = ASR_classify_ArkDataSet(
+        scp_file=args.dirs.train.scp,
         class_file=args.dirs.train.label,
         args=args,
         _shuffle=True,
         transform=True)
-    # dataset_dev = ASR_classify_DataSet(
-    #     dir_wavs=args.dirs.wav,
-    #     class_file=args.dirs.dev.label,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
-    dataset_dev = ASR_classify_DataSet(
-        dir_wavs=args.dirs.wav,
-        class_file=args.dirs.train.label,
+    dataset_dev = ASR_classify_ArkDataSet(
+        scp_file=args.dirs.dev.scp,
+        class_file=args.dirs.dev.label,
         args=args,
         _shuffle=False,
         transform=True)
+    # dataset_dev = ASR_classify_DataSet(
+    #     dir_wavs=args.dirs.wav,
+    #     class_file=args.dirs.train.label,
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
 
     args.vocab = dataset_train.dict_class
     args.dim_output = len(args.vocab)
 
     with tf.device("/cpu:0"):
         # wav data
-        # TFData(dataset=dataset_train,
-        #        dir_save=args.dirs.train.tfdata,
-        #        args=args).save('0')
-        # TFData(dataset=dataset_dev,
-        #        dir_save=args.dirs.dev.tfdata,
-        #        args=args).save('0')
-        # import pdb; pdb.set_trace()
+        TFData(dataset=dataset_train,
+               dir_save=args.dirs.train.tfdata,
+               args=args).split_save(capacity=5000)
+        TFData(dataset=dataset_dev,
+               dir_save=args.dirs.dev.tfdata,
+               args=args).save('0')
+        import pdb; pdb.set_trace()
 
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,

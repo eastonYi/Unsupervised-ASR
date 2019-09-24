@@ -1,0 +1,31 @@
+dirs:
+    exp: fisher
+    train:
+        scp: /data3/easton/data/fisher/train/feats.scp.train
+        label: /data3/easton/data/fisher/train/label.train
+        tfdata: /data3/easton/data/fisher/tfdata/train
+    dev:
+        scp: /data3/easton/data/fisher/test/feats.scp.test
+        label: /data3/easton/data/fisher/test/label.test
+        tfdata: /data3/easton/data/fisher/tfdata/test
+    test:
+        scp: /data3/easton/data/fisher/test/feats.scp.test
+        label: /data3/easton/data/fisher/test/label.test
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_CTC/CTC/checkpoint
+
+data:
+    unit: phone
+
+opti:
+    type: adam
+    lr: 0.0002
+
+dev_step: 100
+decode_step: 100
+save_step: 100
+
+gpus: '0'
+batch_size: 80
+
+num_batch_tokens: 1000
+bucket_boundaries: 81,93,105,118,138,178,260

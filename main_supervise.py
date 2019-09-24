@@ -5,11 +5,13 @@ from time import time
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
+import numpy as np
 
 from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_DataSet
-from utils.tools import CE_loss, evaluate, monitor, ctc_loss
+from utils.tools import CE_loss, evaluate, monitor
+from utils.wfst import WFST_Decoder
 
 from models.GAN import PhoneClassifier
 # from models.GAN import PhoneClassifier2 as PhoneClassifier
@@ -93,13 +95,13 @@ def Train():
             #     x, supervise_bounds, supervise_aligns, model, optimizer_G, args.dim_output)
         else:
             uttids, x = next(iter_feature_train)
-            # aligns = dataset_train.get_attrs('align', uttids.numpy())
-            trans = dataset_train.get_attrs('trans', uttids.numpy())
-            # loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
+            aligns = dataset_train.get_attrs('align', uttids.numpy())
+            # trans = dataset_train.get_attrs('trans', uttids.numpy())
+            loss_supervise = train_G_supervised(x, aligns, model, optimizer_G, args.dim_output)
             # loss_supervise = train_G_TBTT_supervised(x, aligns, model, optimizer_G, args.dim_output)
             # bounds = dataset_train.get_attrs('bounds', uttids.numpy())
             # loss_supervise, bounds_loss = train_G_bounds_supervised(x, bounds, aligns, model, optimizer_G, args.dim_output)
-            loss_supervise = train_G_CTC_supervised(x, trans, model, optimizer_G)
+            # loss_supervise = train_G_CTC_supervised(x, trans, model, optimizer_G)
 
         if step % 10 == 0:
             print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
@@ -124,45 +126,6 @@ def Train():
         step += 1
 
     print('training duration: {:.2f}h'.format((datetime.now()-start_time).total_seconds()/3600))
-
-
-def Decode(save_file):
-    # dataset = ASR_align_DataSet(
-    #     trans_file=args.dirs.train.trans,
-    #     align_file=None,
-    #     uttid2wav=args.dirs.train.wav_scp,
-    #     feat_len_file=args.dirs.train.feat_len,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
-    dataset_dev = ASR_align_DataSet(
-        trans_file=args.dirs.dev.trans,
-        align_file=args.dirs.dev.align,
-        uttid2wav=args.dirs.dev.wav_scp,
-        feat_len_file=args.dirs.dev.feat_len,
-        args=args,
-        _shuffle=False,
-        transform=True)
-    feature_dev = TFData(dataset=dataset_dev,
-                    dir_save=args.dirs.dev.tfdata,
-                    args=args).read()
-    feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
-
-    model = PhoneClassifier(args)
-    model.summary()
-
-    optimizer_G = tf.keras.optimizers.Adam(1e-4)
-    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
-
-    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
-    ckpt.restore(_ckpt_manager.latest_checkpoint)
-    print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-    fer, cer_0 = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=True)
-    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=False)
-    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10, with_stamp=False)
-    print('FER:{:.3f}\t PER:{:.3f}'.format(fer, cer))
-    # decode(dataset, model, args.idx2token, 'output/'+save_file)
-    # decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
 # @tf.function
@@ -235,18 +198,50 @@ def train_G_bounds_supervised(x, bounds, labels, model, optimizer_G, dim_output)
     return gen_loss, bounds_loss
 
 
-# @tf.function
-def train_G_CTC_supervised(x, labels, model, optimizer_G):
-    with tf.GradientTape() as tape_G:
-        logits = model(x, training=True)
-        len_logits = tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(x), -1) > 0), tf.int32), -1)
-        len_labels = tf.reduce_sum(tf.cast(labels > 0, tf.int32), -1)
-        loss = ctc_loss(logits, len_logits, labels, len_labels)
+def Decode(save_file):
+    # dataset = ASR_align_DataSet(
+    #     trans_file=args.dirs.train.trans,
+    #     align_file=None,
+    #     uttid2wav=args.dirs.train.wav_scp,
+    #     feat_len_file=args.dirs.train.feat_len,
+    #     args=args,
+    #     _shuffle=False,
+    #     transform=True)
+    dataset_dev = ASR_align_DataSet(
+        trans_file=args.dirs.dev.trans,
+        align_file=args.dirs.dev.align,
+        uttid2wav=args.dirs.dev.wav_scp,
+        feat_len_file=args.dirs.dev.feat_len,
+        args=args,
+        _shuffle=False,
+        transform=True)
+    feature_dev = TFData(dataset=dataset_dev,
+                    dir_save=args.dirs.dev.tfdata,
+                    args=args).read()
+    feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
-    gradients_G = tape_G.gradient(loss, model.trainable_variables)
-    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+    model = PhoneClassifier(args)
+    model.summary()
 
-    return loss
+    optimizer_G = tf.keras.optimizers.Adam(1e-4)
+    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
+
+    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(_ckpt_manager.latest_checkpoint)
+    print('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=True)
+    # fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=False)
+    decode_outs = np.zeros((300), dtype=np.int32)
+    wfst = WFST_Decoder(
+        decode_outs=decode_outs,
+        fcdll="wfst/WFST_Decode/bin/libctc_wfst_lib.so",
+        fcfg="wfst/cfg.json")
+    cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, wfst=wfst)
+    fer = 0
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10, with_stamp=False)
+    print('FER:{:.3f}\t PER:{:.3f}'.format(fer, cer))
+    # decode(dataset, model, args.idx2token, 'output/'+save_file)
+    # decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)
 
 
 if __name__ == '__main__':
