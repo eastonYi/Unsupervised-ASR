@@ -234,11 +234,11 @@ def Decode(save_file):
     decode_outs = np.zeros((300), dtype=np.int32)
     wfst = WFST_Decoder(
         decode_outs=decode_outs,
-        fcdll="wfst/WFST_Decode/bin/libctc_wfst_lib.so",
-        fcfg="wfst/cfg.json")
-    cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, wfst=wfst)
-    fer = 0
-    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=10, with_stamp=False)
+        fcdll="../WFST/libctc_wfst_lib.so",
+        fcfg="wfst/timit.json")
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, wfst=wfst)
+    print('FER:{:.3f}\t WFST PER:{:.3f}'.format(fer, cer))
+    fer, cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, model, beam_size=0, with_stamp=False)
     print('FER:{:.3f}\t PER:{:.3f}'.format(fer, cer))
     # decode(dataset, model, args.idx2token, 'output/'+save_file)
     # decode(dataset, model, args.idx2token, 'output/'+save_file, align=True)

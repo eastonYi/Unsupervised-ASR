@@ -83,16 +83,24 @@ class WFST_Decoder:
 
 
 if __name__ == '__main__':
-    distribution = np.array([10, 512])
+    import sys
 
+    dll = sys.argv[-2]
+    cfg = sys.argv[-1]
+
+    #distribution = np.ones([5, 1386]) * 1e-5
+    distribution = np.ones([5, 41], np.float32) * 1e-9
+    distribution[0][40] = 1.0
+    distribution[1][5] = 1.0
+    distribution[2][40] = 1.0
+    distribution[3][6] = 1.0
+    distribution[4][40] = 1.0
     # WFTS config
-    len_decode_max=200
-    decode_outs=np.zeros((len_decode_max), dtype=np.int32)
+    decode_outs = np.zeros([10], np.int32)
     wfst = WFST_Decoder(
-        len_decode_max=len_decode_max,
         decode_outs=decode_outs,
-        fcdll="bin/libctc_wfst_lib.so",
-        fcfg="cfg.json")
+        fcdll=dll,
+        fcfg=cfg)
 
-    distribution_log = np.log(distribution)
-    decoded = wfst.decode(distribution_log)
+    decoded = wfst.decode(distribution)
+    print('decoded: ', decoded)

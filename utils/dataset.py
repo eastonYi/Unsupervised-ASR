@@ -210,6 +210,151 @@ class ASR_align_DataSet(ASRDataSet):
         return int(np.round(len(align)/len(feat)))
 
 
+class ASR_align_ArkDataSet(ASRDataSet):
+    """
+    for dataset with alignment, i.e. TIMIT
+    needs:
+        vocab.txt remains the index of phones in phones.txt !!
+        - align_file
+            uttid phone_id phone_id ...
+        - trans_file
+
+        - uttid2wav.txt
+            uttid wav
+        - vocab.txt (used for model output)
+            phone
+        -
+    """
+    def __init__(self, scp_file, trans_file, align_file, feat_len_file, args, _shuffle, transform):
+        super().__init__(align_file, args, _shuffle, transform)
+        from .tools import ArkReader
+        self.reader = ArkReader(scp_file)
+        self.dict_trans = self.load_trans(trans_file) if trans_file else None
+        self.list_uttids = list(self.dict_trans.keys())
+        self.dict_aligns = self.load_aligns(align_file, feat_len_file) if align_file else None
+
+        if _shuffle:
+            shuffle(self.list_uttids)
+
+    def __getitem__(self, id):
+        uttid = self.list_uttids[id]
+
+        feat = self.reader.read_utt_data(id)
+        if self.transform:
+            feat = process_raw_feature(feat, self.args)
+
+        try:
+            trans = self.dict_trans[uttid]
+        except:
+            trans = None
+        try:
+            align = self.dict_aligns[uttid]
+            stamps = align2stamp(align)
+        except:
+            align = None
+            stamps = None
+
+        sample = {'uttid': uttid,
+                  'feature': feat,
+                  'trans': trans,
+                  'align': align,
+                  'stamps': stamps}
+
+        return sample
+
+    def get_attrs(self, attr, uttids, max_len=None):
+        """
+        length serves for the align attr to ensure the align's length same as feature
+        """
+        list_res = []
+        list_len = []
+        for uttid in uttids:
+            if type(uttid) == bytes:
+                uttid = uttid.decode('utf-8')
+            if attr == 'wav':
+                wav = self.dict_wavs[uttid]
+                res = wav
+            elif attr == 'feature':
+                wav = self.dict_wavs[uttid]
+                feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+                if self.transform:
+                    feat = process_raw_feature(feat, self.args)
+                res = feat
+            elif attr == 'trans':
+                trans = self.dict_trans[uttid]
+                res = trans
+            elif attr == 'align':
+                align = self.dict_aligns[uttid]
+                res = align
+            elif attr == 'stamps':
+                align = self.dict_aligns[uttid]
+                stamps = align2stamp(align)
+                res = stamps
+            elif attr == 'bounds':
+                align = self.dict_aligns[uttid]
+                bounds = align2bound(align)
+                res = bounds
+            else:
+                raise KeyError
+            list_res.append(res)
+            list_len.append(len(res))
+
+        if attr in ('trans', 'align', 'stamps', 'bounds'):
+            max_len = max(list_len) if not max_len else max_len
+            list_padded = []
+            for res in list_res:
+                list_padded.append(np.concatenate([res, [0]*(max_len-len(res))])[: max_len])
+            list_res = np.array(list_padded, np.int32)
+
+        return list_res
+
+    def load_aligns(self, align_file, feat_len_file):
+        dict_aligns = defaultdict(lambda: np.array([0]))
+        dict_feat_len = {}
+
+        with open(feat_len_file) as f:
+            for line in f:
+                uttid, len_feature = line.strip().split()
+                dict_feat_len[uttid] = int(len_feature)
+        align_rate = self.get_alignRate(align_file)
+
+        with open(align_file) as f:
+            for line in f:
+                uttid, align = line.strip().split(maxsplit=1)
+                len_feat = dict_feat_len[uttid]
+                align = [int(i) for i in align.split()] + [1]
+                # assert len(align) == len_feat + 1
+                dict_aligns[uttid] = np.array(align[::align_rate][:len_feat])
+
+        return dict_aligns
+
+    def load_trans(self, trans_file):
+        # dict_trans = defaultdict(lambda: None)
+        dict_trans = {}
+        with open(trans_file) as f:
+            for line in f:
+                uttid, load_trans = line.strip().split(maxsplit=1)
+                dict_trans[uttid] = np.array([self.token2idx[i] for i in load_trans.split()])
+
+        return dict_trans
+
+    def __len__(self):
+        return len(self.list_uttids)
+
+    def get_alignRate(self, align_file):
+        with open(align_file) as f:
+            uttid, align = f.readline().strip().split(maxsplit=1)
+
+        wav = self.dict_wavs[uttid]
+        feat = audio2vector(wav, self.args.data.dim_raw_input, method=self.args.data.featType)
+        if self.transform:
+            feat = process_raw_feature(feat, self.args)
+
+        align = align.split()
+
+        return int(np.round(len(align)/len(feat)))
+
+
 class ASR_classify_DataSet(ASRDataSet):
 
     def __init__(self, dir_wavs, class_file, args, _shuffle, transform):
@@ -273,8 +418,8 @@ class ASR_classify_DataSet(ASRDataSet):
 
 class ASR_classify_ArkDataSet(ASRDataSet):
 
-    def __init__(self, scp_file, class_file, args, _shuffle, transform):
-        super().__init__(class_file, args, _shuffle, transform)
+    def __init__(self, scp_file, class_file, args, _shuffle):
+        super().__init__(class_file, args, _shuffle, transform=False)
         from .tools import ArkReader
         self.reader = ArkReader(scp_file)
         self.dict_y, self.dict_class = self.load_y(class_file)
@@ -283,6 +428,7 @@ class ASR_classify_ArkDataSet(ASRDataSet):
     def __getitem__(self, id):
         uttid = self.list_uttids[id]
         feat = self.reader.read_utt_data(id)
+        feat = feat[::3, :]
         y = self.dict_y[uttid]
 
         sample = {'uttid': uttid,

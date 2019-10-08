@@ -1,0 +1,47 @@
+dirs:
+    exp: hksut
+    train:
+        scp: /data/sxu/easton/data/hkust/feats_3x.scp
+        trans: /data/sxu/easton/data/hkust/pinyin.train_3x.scp
+        # align: /home/user/easton/data/AISHELL/kaldi_gen/train.phone67.frame
+        tfdata: /data/sxu/easton/data/hkust/tfdata/train_pinyin
+    dev:
+        scp: /data/sxu/easton/data/hkust/feats.dev.scp
+        trans: /data/sxu/easton/data/hkust/pinyin.dev.scp
+        # align: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone67.frame
+        tfdata: /data/sxu/easton/data/hkust/tfdata/dev_pinyin
+    test:
+        scp: /data/sxu/easton/data/hkust/feats.dev.scp
+        trans: /data/sxu/easton/data/hkust/pinyin.dev.scp
+    type: scp
+    vocab: /data/sxu/easton/data/hkust/pinyin_1385+1.vocab
+    checkpoint: /data/sxu/easton/projects/EODM/exps/hksut/hkust_CTC/checkpoint
+
+data:
+    featType: mfcc
+    left_context: 3
+    right_context: 0
+    downsample: 2
+    add_delta: False
+    unit: phone
+
+model:
+    encoder:
+        structure: bGRU
+        num_hidden: 256
+        num_filters: 64
+        dropout: 0.9
+opti:
+    type: adam
+    lr: 0.0004
+
+dev_step: 200
+decode_step: 200
+save_step: 200
+
+gpus: '0'
+batch_size: 60
+num_supervised:
+num_batch_tokens: 35000
+bucket_boundaries: 172,231,278,321,364,407,457,518,604,766,2083,4264
+seed: 8

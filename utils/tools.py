@@ -103,18 +103,18 @@ class TFData:
         def generator():
             nonlocal fw, i, capacity
             # for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
-            for j in tqdm(range(i*capacity, (i+1)*capacity)):
+            for j in tqdm(range(i*capacity, min((i+1)*capacity, len(self.dataset)))):
                 sample = self.dataset[j]
                 line = sample['uttid'] + ' ' + str(len(sample['feature']))
                 fw.write(line + '\n')
                 yield serialize_example(sample['uttid'], sample['feature'])
 
         for i in range(len(self.dataset)//capacity + 1):
+        # for i in [2,3,4]:
             dataset_tf = tf.data.Dataset.from_generator(
                 generator=generator,
                 output_types=tf.string,
                 output_shapes=())
-
             record_file = self.dir_save/'{}.recode'.format(i)
             mkdirs(record_file)
             writer = tf.data.experimental.TFRecordWriter(str(record_file))
@@ -564,9 +564,15 @@ def evaluate(feature, dataset, dev_size, model, beam_size=0, with_stamp=True, wf
                 # preds = get_predicts(_logits)
                 # acc = align_accuracy(logits, aligns)
         else:
+            lens = tf.reduce_sum(tf.cast(tf.reduce_sum(x, -1) > 0, tf.int32), -1)
             distribution = tf.nn.softmax(logits)
-            decoded = wfst.decode(distribution)
-            acc = align_accuracy(decoded, aligns)
+            list_decoded = []
+            for distrib, l in zip(distribution, lens):
+                decoded = wfst.decode(distribution)
+                list_decoded.append(decoded[:l])
+            preds = list_pad(list_decoded)
+            # acc = align_accuracy(decoded, aligns)
+            acc = 0
 
         list_acc.append(acc)
 
@@ -969,3 +975,13 @@ class ArkReader(object):
 
         self.scp_data = self.scp_data[self.scp_position:-1]
         self.utt_ids = self.utt_ids[self.scp_position:-1]
+
+
+def list_pad(list_t):
+    list_len = [len(t) for t in list_t]
+    max_len = max(list_len)
+    list_paded = []
+    for t in list_t:
+        list_paded.append(tf.concat([t, [0]*(max_len-len(t))], 0))
+
+    return tf.stack(list_paded)

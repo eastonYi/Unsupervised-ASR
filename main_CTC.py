@@ -9,10 +9,11 @@ import numpy as np
 
 from utils.tools import TFData
 from utils.arguments import args
-from utils.dataset import ASR_align_DataSet
+from utils.dataset import ASR_align_ArkDataSet
 from utils.tools import batch_cer
 
-from models.GAN import PhoneClassifier
+# from models.GAN import PhoneClassifier
+from models.encoders import conv_lstm
 
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
@@ -20,22 +21,22 @@ tf.random.set_seed(args.seed)
 
 def Train():
     with tf.device("/cpu:0"):
-        dataset_train = ASR_align_DataSet(
+        dataset_train = ASR_align_ArkDataSet(
+            scp_file=args.dirs.train.scp,
             trans_file=args.dirs.train.trans,
-            align_file=args.dirs.train.align,
-            uttid2wav=args.dirs.train.wav_scp,
-            feat_len_file=args.dirs.train.feat_len,
-            args=args,
-            _shuffle=True,
-            transform=True)
-        dataset_dev = ASR_align_DataSet(
-            trans_file=args.dirs.dev.trans,
-            align_file=args.dirs.dev.align,
-            uttid2wav=args.dirs.dev.wav_scp,
-            feat_len_file=args.dirs.dev.feat_len,
+            align_file=None,
+            feat_len_file=None,
             args=args,
             _shuffle=False,
-            transform=True)
+            transform=False)
+        dataset_dev = ASR_align_ArkDataSet(
+            scp_file=args.dirs.dev.scp,
+            trans_file=args.dirs.dev.trans,
+            align_file=None,
+            feat_len_file=None,
+            args=args,
+            _shuffle=False,
+            transform=False)
         # wav data
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
@@ -54,7 +55,7 @@ def Train():
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
     # create model paremeters
-    model = PhoneClassifier(args)
+    model = conv_lstm(args)
     model.summary()
     optimizer_G = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
 
@@ -71,17 +72,20 @@ def Train():
         step = int(_ckpt_manager.latest_checkpoint.split('-')[-1])
 
     start_time = datetime.now()
-
+    num_processed = 0
     while step < 99999999:
         start = time()
 
         uttids, x = next(iter_feature_train)
         trans = dataset_train.get_attrs('trans', uttids.numpy())
-        loss_supervise = train_G_CTC_supervised(x, trans, model, optimizer_G)
+        loss_supervise = train_CTC_supervised(x, trans, model, optimizer_G)
+
+        num_processed += len(x)
+        progress = num_processed / args.data.train_size
 
         if step % 10 == 0:
-            print('loss_supervise: {:.3f}\tbatch: {}\tused: {:.3f}\tstep: {}'.format(
-                   loss_supervise, x.shape, time()-start, step))
+            print('loss: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.3f}% step: {}'.format(
+                   loss_supervise, x.shape, time()-start, progress*100, step))
             with writer.as_default():
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
         if step % args.dev_step == 0:
@@ -100,20 +104,20 @@ def Train():
 
 
 def Decode(save_file):
-    dataset_dev = ASR_align_DataSet(
+    dataset_dev = ASR_align_ArkDataSet(
+        scp_file=args.dirs.dev.scp,
         trans_file=args.dirs.dev.trans,
-        align_file=args.dirs.dev.align,
-        uttid2wav=args.dirs.dev.wav_scp,
-        feat_len_file=args.dirs.dev.feat_len,
+        align_file=None,
+        feat_len_file=None,
         args=args,
         _shuffle=False,
-        transform=True)
+        transform=False)
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args).read()
     feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
 
-    model = PhoneClassifier(args)
+    model = conv_lstm(args)
     model.summary()
 
     optimizer_G = tf.keras.optimizers.Adam(1e-4)
@@ -126,19 +130,18 @@ def Decode(save_file):
     print('PER:{:.3f}'.format(cer))
 
 
-# @tf.function
 def ctc_loss(logits, len_logits, labels, len_labels):
     """
     No valid path found: It is possible that no valid path is found if the
     activations for the targets are zero.
     """
-    # ctc_loss = tf.nn.ctc_loss(labels, logits, len_labels, len_logits, logits_time_major=False)
     ctc_loss = tf.nn.ctc_loss(
         labels,
         logits,
         label_length=len_labels,
         logit_length=len_logits,
-        logits_time_major=False)
+        logits_time_major=False,
+        blank_index=-1)
 
     return ctc_loss
 
@@ -166,15 +169,15 @@ def ctc_decode(logits, len_logits, beam_size=1):
     return preds
 
 
-def get_x_len(x):
+def get_logits_len(logits):
 
-    return tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(x), -1) > 0), tf.int32), -1)
+    return tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(logits), -1) > 0), tf.int32), -1)
 
 
 def monitor(sample, model):
     x = np.array([sample['feature']], dtype=np.float32)
     logits = model(x)
-    len_logits = get_x_len(x)
+    len_logits = get_logits_len(logits)
     preds = ctc_decode(logits, len_logits)
 
     print('predicts: \n', preds.numpy()[0])
@@ -189,8 +192,8 @@ def evaluate(feature, dataset, dev_size, model):
     total_res_len = 0
     for batch in feature:
         uttids, x = batch
-        len_logits = get_x_len(x)
         logits = model(x)
+        len_logits = get_logits_len(logits)
         preds = ctc_decode(logits, len_logits)
 
         trans = dataset.get_attrs('trans', uttids.numpy())
@@ -208,17 +211,17 @@ def evaluate(feature, dataset, dev_size, model):
     return cer
 
 
-# @tf.function
-def train_G_CTC_supervised(x, labels, model, optimizer_G):
-    with tf.GradientTape() as tape_G:
+@tf.function(experimental_relax_shapes=True)
+def train_CTC_supervised(x, labels, model, optimizer):
+    with tf.GradientTape() as tape:
         logits = model(x, training=True)
-        len_logits = get_x_len(x)
+        len_logits = get_logits_len(logits)
         len_labels = tf.reduce_sum(tf.cast(labels > 0, tf.int32), -1)
         loss = ctc_loss(logits, len_logits, labels, len_labels)
         loss = tf.reduce_mean(loss)
 
-    gradients_G = tape_G.gradient(loss, model.trainable_variables)
-    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
     return loss
 
