@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 import numpy as np
 
-from utils.tools import TFData, mkdirs, CE_loss
+from utils.tools import TFData, mkdirs, get_tensor_len
 from utils.dataset import ASR_classify_ArkDataSet
 
 
@@ -63,7 +63,6 @@ try:
 except:
     print("have not converted to tfdata yet: ")
 
-
 # def Classifier(args):
 #     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
 #                                         name='generator_input_x')
@@ -97,10 +96,10 @@ def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
 
 
 def Classifier(args):
-    dim_hidden = 512
-    max_seq_len = 1000
+    dim_hidden = 12
+    # max_seq_len = 2000
     num_layers = 5
-    x = input_x = tf.keras.layers.Input(shape=[max_seq_len, args.dim_input],
+    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
                                       name='discriminator_input_x')
 
     x = tf.keras.layers.Dense(dim_hidden, use_bias=False, activation='linear')(x)
@@ -115,23 +114,25 @@ def Classifier(args):
         x = tf.keras.layers.ReLU()(x)
 
         x = inputs + (0.3*x)
-        # x = tf.keras.layers.MaxPooling1D()(x)
+        x = tf.keras.layers.MaxPooling1D()(x)
 
     for _ in range(1):
-        x = tf.keras.layers.GRU(256,
+        x = tf.keras.layers.GRU(56,
                                 return_sequences=True,
                                 dropout=0.1)(x)
 
     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
+    len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
     # len_x = tf.cast(tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32), -1)/
     #                 tf.pow(2.0, num_layers), tf.int32)
-    ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
-    logits_c = tf.gather_nd(logits, ids)
-    logits_c = tf.reshape(logits_c, [-1, args.dim_output])
-
+    # ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
+    # logits_c = tf.gather_nd(logits, ids)
+    # logits_c = tf.reshape(logits_c, [-1, args.dim_output])
+    logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
+                  [1, 1, args.dim_output])
     model = tf.keras.Model(inputs=input_x,
-                           outputs=logits_c,
+                           outputs=logits,
                            name='sequence_discriminator')
 
     return model
@@ -160,20 +161,20 @@ def Train():
 
     with tf.device("/cpu:0"):
         # wav data
-        # TFData(dataset=dataset_train,
-        #        dir_save=args.dirs.train.tfdata,
-        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=1000)
-        # TFData(dataset=dataset_dev,
-        #        dir_save=args.dirs.dev.tfdata,
-        #        args=args, max_feat_len=args.max_seq_len).save('0')
-        # import pdb; pdb.set_trace()
+        TFData(dataset=dataset_train,
+               dir_save=args.dirs.train.tfdata,
+               args=args, max_feat_len=args.max_seq_len).split_save(capacity=1000)
+        TFData(dataset=dataset_dev,
+               dir_save=args.dirs.dev.tfdata,
+               args=args, max_feat_len=args.max_seq_len).save('0')
+        import pdb; pdb.set_trace()
 
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
-                        args=args, max_feat_len=1500).read()
+                        args=args, max_feat_len=2000).read()
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
-                        args=args, max_feat_len=1500).read()
+                        args=args, max_feat_len=2000).read()
         # feature_dev = TFData(dataset=dataset_train,
         #                 dir_save=args.dirs.train.tfdata,
         #                 args=args).read()
@@ -183,16 +184,15 @@ def Train():
         #     bucket_batch_sizes=args.list_batch_size,
         #     padded_shapes=((), [None, args.dim_input]))
         # iter_feature_train = iter(feature_train.repeat().shuffle(10).apply(bucket).prefetch(buffer_size=3))
-        iter_feature_train = iter(feature_train.repeat().shuffle(50).padded_batch(args.batch_size,
-                ((), [None, args.dim_input])).prefetch(buffer_size=5))
-        feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
+        iter_feature_train = iter(feature_train.cache().repeat().shuffle(5).padded_batch(args.batch_size,
+                ((), [None, args.dim_input])).prefetch(buffer_size=2))
+        feature_dev = feature_dev.padded_batch(1, ((), [None, args.dim_input]))
 
     # create model paremeters
     model = Classifier(args)
     model.summary()
     optimizer_G = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
 
-    writer = tf.summary.create_file_writer(str(args.dir_log))
     ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
     ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     step = 0
@@ -206,20 +206,21 @@ def Train():
 
     start_time = datetime.now()
     processed = 0
-    while step < 9999:
+    while step < 999999:
         start = time()
         uttids, x = next(iter_feature_train)
-        y = dataset_train.get_y(uttids.numpy())
+        # y = dataset_train.get_y(uttids.numpy())
         processed += len(x)
-        loss = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
+        # loss = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
+        loss = 0
         batch_time = time()-start
         if step % 10 == 0:
             print('loss: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.2f}% step: {}'.format(
                    loss, x.shape, batch_time, processed/args.data.train_size , step))
-        if step % args.dev_step == 1:
-            # p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-            p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-            print('eval performance: {:.2f}%'.format(p*100))
+        # if step % args.dev_step == 1:
+        #     # p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+        #     p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+        #     print('eval performance: {:.2f}%'.format(p*100))
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
@@ -234,35 +235,50 @@ def evaluate(feature_dev, dataset_dev, dev_size, model):
     for uttids, x in feature_dev:
         y = dataset_dev.get_y(uttids.numpy())
         logits = model(x)
-        _y = tf.argmax(logits, -1)
-        p = tf.reduce_mean(tf.cast(tf.equal(y, _y), tf.float32))
+        _y = tf.argmax(tf.math.bincount(tf.argmax(logits, -1, output_type=tf.int32)))
+        p = tf.cast(tf.equal(y, _y), tf.float32)
         list_p.append(p)
 
     return tf.reduce_mean(list_p)
 
-
-@tf.function(experimental_relax_shapes=True)
-def step(model, x, y, dim_output):
-    logits = model(x, training=True)
-    ce_loss = CE_loss(logits, y, dim_output, confidence=0.9)
-    gen_loss = ce_loss
-
-    return gen_loss
-
+# @tf.function(experimental_relax_shapes=True)
 def train_G_supervised(x, y, model, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
-        gen_loss = step(model, x, y, dim_output)
-        # logits = model(x, training=True)
-        # ce_loss = CE_loss(logits, y, dim_output, confidence=0.9)
-        # gen_loss = ce_loss
+        # gen_loss = step(model, x, y, dim_output)
+        logits = model(x, training=True)
+        try:
+            _y = tf.tile(y[:, None], [1, logits.shape[1]])
+        except:
+            import pdb; pdb.set_trace()
+        gen_loss = CE_loss(logits, _y, dim_output, confidence=0.9)
 
-    if np.isnan(gen_loss.numpy()):
-        gen_loss = tf.convert_to_tensor(0.0)
-    else:
-        gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
-        optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+    # else:
+    # gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+    # optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
 
     return gen_loss
+
+
+def CE_loss(logits, labels, vocab_size, confidence=0.9):
+
+    low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)
+    normalizing = -(confidence*tf.math.log(confidence) +
+        tf.cast(vocab_size-1, tf.float32) * low_confidence * tf.math.log(low_confidence + 1e-20))
+    soft_targets = tf.one_hot(
+        tf.cast(labels, tf.int32),
+        depth=vocab_size,
+        on_value=confidence,
+        off_value=low_confidence)
+
+    xentropy = tf.nn.softmax_cross_entropy_with_logits(
+        logits=logits, labels=soft_targets)
+    loss = xentropy - normalizing
+
+    len_logits = get_tensor_len(logits)
+    gen_loss = tf.sequence_mask(len_logits, dtype=tf.float32) * loss
+    loss = tf.reduce_mean(tf.reduce_sum(gen_loss, -1) / tf.cast(len_logits, tf.float32))
+
+    return loss
 
 
 if __name__ == '__main__':

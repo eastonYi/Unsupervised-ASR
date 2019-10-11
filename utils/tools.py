@@ -10,6 +10,12 @@ from time import time
 from struct import pack, unpack
 
 
+def get_tensor_len(tensor):
+    if tensor.get_shape().ndims == 3:
+        return tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(tensor), -1) > 0), tf.int32), -1)
+    elif tensor.get_shape().ndims == 2:
+        return tf.reduce_sum(tf.cast(tf.abs(tensor) > 0, tf.int32), -1)
+
 def mkdirs(filename):
     if not filename.parent.is_dir():
         mkdirs(filename.parent)
@@ -507,7 +513,6 @@ def compute_ppl(logits, labels):
 
 
 def CE_loss(logits, labels, vocab_size, confidence=0.9):
-    get_preds_ngram
     mask = tf.cast(labels>0, dtype=tf.float32)
 
     low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)

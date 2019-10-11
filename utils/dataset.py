@@ -11,7 +11,7 @@ import tensorflow as tf
 from pathlib import Path
 from abc import ABCMeta, abstractmethod
 
-from .dataProcess import audio2vector, get_audio_length, process_raw_feature
+from .dataProcess import audio2vector, get_audio_length, process_raw_feature, splice, down_sample
 from .tools import align2stamp, align2bound
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
@@ -428,7 +428,8 @@ class ASR_classify_ArkDataSet(ASRDataSet):
     def __getitem__(self, id):
         uttid = self.list_uttids[id]
         feat = self.reader.read_utt_data(id)
-        feat = feat[::3, :]
+        # feat = feat[::3, :]
+        feat = down_sample(splice(feat, 2, 0), 3)
         y = self.dict_y[uttid]
 
         sample = {'uttid': uttid,

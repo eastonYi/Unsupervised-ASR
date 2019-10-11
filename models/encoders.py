@@ -4,15 +4,12 @@ import numpy as np
 
 
 def conv_lstm(args):
-    input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
-                                    name='conv_lstm_input')
-
     num_hidden = args.model.encoder.num_hidden
-    dropout = args.model.encoder.dropout
     num_filters = args.model.encoder.num_filters
     size_feat = args.dim_input
     dim_output = args.dim_output
 
+    input_x = Input(shape=[None, args.dim_input], name='conv_lstm_input')
     size_length = tf.shape(input_x)[1]
     size_feat = int(size_feat/3)
     len_feats = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
@@ -24,7 +21,6 @@ def conv_lstm(args):
         kernel=(3,3),
         stride=(2,2),
         padding='SAME')
-
     gates = Conv2D(
         4 * num_filters,
         (3,3),
@@ -68,6 +64,7 @@ def normal_conv(x, filter_num, kernel, stride, padding):
     output = ReLU()(x)
 
     return output
+
 
 def pooling(x, len_sequence, num_hidden, type):
 

@@ -25,10 +25,8 @@ data:
 
 model:
     encoder:
-        structure: bGRU
-        num_hidden: 256
+        num_hidden: 600
         num_filters: 64
-        dropout: 0.9
 opti:
     type: adam
     lr: 0.0004
@@ -40,6 +38,6 @@ save_step: 200
 gpus: '0'
 batch_size: 60
 num_supervised:
-num_batch_tokens: 35000
+num_batch_tokens: 25000
 bucket_boundaries: 172,231,278,321,364,407,457,518,604,766,2083,4264
 seed: 8

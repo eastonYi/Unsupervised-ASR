@@ -2,21 +2,21 @@ dirs:
     exp: fisher
     train:
         scp: /data/sxu/easton/data/fisher/train/feats.scp.train
-        # label: /data/sxu/easton/data/fisher/train/label.train
-        # tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3
-        label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
-        tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
+        label: /data/sxu/easton/data/fisher/train/label.train
+        tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3
+        # label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
+        # tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
     dev:
-        # scp: /data/sxu/easton/data/fisher/test/feats.scp.test
-        # label: /data/sxu/easton/data/fisher/test/label_01_02_03.test
-        # tfdata: /data/sxu/easton/data/fisher/tfdata/test_div3_01_02_03
-        scp: /data/sxu/easton/data/fisher/train/feats.scp.train
-        label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
-        tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
+        scp: /data/sxu/easton/data/fisher/test/feats.scp.test
+        label: /data/sxu/easton/data/fisher/test/label_01_02_03.test
+        tfdata: /data/sxu/easton/data/fisher/tfdata/test_div3
+        # scp: /data/sxu/easton/data/fisher/train/feats.scp.train
+        # label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
+        # tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
     test:
         scp: /data/sxu/easton/data/fisher/test/feats.scp.test
         label: /data/sxu/easton/data/fisher/test/label_01_02_03.test
-    checkpoint: /data/sxu/easton/projects/EODM/exps/fisher/fisher/checkpoint
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/fisher/fisher/checkpoint
 
 data:
     unit: phone
@@ -30,7 +30,7 @@ decode_step: 200
 save_step: 500
 
 gpus: '0'
-batch_size: 30
+batch_size: 80
 
 max_seq_len: 6000
 num_batch_tokens: 1000
