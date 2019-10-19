@@ -54,44 +54,44 @@ class TFData:
         self.dim_feature = dataset[0]['feature'].shape[-1] \
             if dataset else self.read_tfdata_info(dir_save)['dim_feature']
 
-    def save(self, name, length_file='feature_length.txt'):
-        num_token = 0
-        num_damaged_sample = 0
-        fw = open(self.dir_save/length_file, 'w')
-        def serialize_example(uttid, feature):
-            atts = {
-                'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
-                'feature': self._bytes_feature(feature.tostring())
-            }
-            example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
-
-            return example_proto.SerializeToString()
-
-        def generator():
-            nonlocal fw
-            for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
-                line = sample['uttid'] + ' ' + str(len(sample['feature']))
-                fw.write(line + '\n')
-                yield serialize_example(sample['uttid'], sample['feature'])
-
-        dataset_tf = tf.data.Dataset.from_generator(
-            generator=generator,
-            output_types=tf.string,
-            output_shapes=())
-
-        record_file = self.dir_save/'{}.recode'.format(name)
-        mkdirs(record_file)
-        writer = tf.data.experimental.TFRecordWriter(str(record_file))
-        writer.write(dataset_tf)
-
-        with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
-            fw.write('data_file {}\n'.format(self.dataset.file))
-            fw.write('dim_feature {}\n'.format(self.dim_feature))
-            fw.write('num_tokens {}\n'.format(num_token))
-            fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
-            fw.write('damaged samples: {}\n'.format(num_damaged_sample))
-
-        return
+    # def save(self, name, length_file='feature_length.txt'):
+    #     num_token = 0
+    #     num_damaged_sample = 0
+    #     fw = open(self.dir_save/length_file, 'w')
+    #     def serialize_example(uttid, feature):
+    #         atts = {
+    #             'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
+    #             'feature': self._bytes_feature(feature.tostring())
+    #         }
+    #         example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
+    #
+    #         return example_proto.SerializeToString()
+    #
+    #     def generator():
+    #         nonlocal fw
+    #         for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+    #             line = sample['uttid'] + ' ' + str(len(sample['feature']))
+    #             fw.write(line + '\n')
+    #             yield serialize_example(sample['uttid'], sample['feature'])
+    #
+    #     dataset_tf = tf.data.Dataset.from_generator(
+    #         generator=generator,
+    #         output_types=tf.string,
+    #         output_shapes=())
+    #
+    #     record_file = self.dir_save/'{}.recode'.format(name)
+    #     mkdirs(record_file)
+    #     writer = tf.data.experimental.TFRecordWriter(str(record_file))
+    #     writer.write(dataset_tf)
+    #
+    #     with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
+    #         fw.write('data_file {}\n'.format(self.dataset.file))
+    #         fw.write('dim_feature {}\n'.format(self.dim_feature))
+    #         fw.write('num_tokens {}\n'.format(num_token))
+    #         fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
+    #         fw.write('damaged samples: {}\n'.format(num_damaged_sample))
+    #
+    #     return
 
     def split_save(self, length_file='feature_length.txt', capacity=50000):
         num_token = 0
@@ -839,19 +839,17 @@ class ArkReader(object):
 
         self.scp_position = 0
         fin = open(scp_path, "r", errors='ignore')
-        self.utt_ids = []
-        self.scp_data = []
+        self.dict_scp = {}
         line = fin.readline()
         while line != '' and line != None:
-            utt_id, path_pos = line.replace('\n', '').split(' ')
+            uttid, path_pos = line.replace('\n', '').split(' ')
             path, pos = path_pos.split(':')
-            self.utt_ids.append(utt_id)
-            self.scp_data.append((path, pos))
+            self.dict_scp[uttid] = (path, pos)
             line = fin.readline()
 
         fin.close()
 
-    def read_utt_data(self, index):
+    def read_utt_data(self, uttid):
         '''
         read data from the archive
 
@@ -861,9 +859,8 @@ class ArkReader(object):
         Returns:
             a numpy array containing the data from the utterance
         '''
-
-        ark_read_buffer = open(self.scp_data[index][0], 'rb')
-        ark_read_buffer.seek(int(self.scp_data[index][1]), 0)
+        ark_read_buffer = open(self.dict_scp[uttid][0], 'rb')
+        ark_read_buffer.seek(int(self.dict_scp[uttid][1]), 0)
         header = unpack('<xcccc', ark_read_buffer.read(5))
         if header[0] != b"B":
             print("Input .ark file is not binary")
@@ -909,77 +906,6 @@ class ArkReader(object):
         ark_read_buffer.close()
 
         return utt_mat
-
-    def read_next_utt(self):
-        '''
-        read the next utterance in the scp file
-
-        Returns:
-            the utterance ID of the utterance that was read, the utterance data,
-            bool that is true if the reader looped back to the beginning
-        '''
-
-        if len(self.scp_data) == 0:
-            return None, None, True
-
-        #if at end of file loop around
-        if self.scp_position >= len(self.scp_data):
-            looped = True
-            self.scp_position = 0
-        else:
-            looped = False
-
-        self.scp_position += 1
-
-        return (self.utt_ids[self.scp_position-1],
-                self.read_utt_data(self.scp_position-1), looped)
-
-    def read_next_scp(self):
-        '''
-        read the next utterance ID but don't read the data
-
-        Returns:
-            the utterance ID of the utterance that was read
-        '''
-
-        #if at end of file loop around
-        if self.scp_position >= len(self.scp_data):
-            self.scp_position = 0
-
-        self.scp_position += 1
-
-        return self.utt_ids[self.scp_position-1]
-
-    def read_previous_scp(self):
-        '''
-        read the previous utterance ID but don't read the data
-
-        Returns:
-            the utterance ID of the utterance that was read
-        '''
-
-        if self.scp_position < 0: #if at beginning of file loop around
-            self.scp_position = len(self.scp_data) - 1
-
-        self.scp_position -= 1
-
-        return self.utt_ids[self.scp_position+1]
-
-    def read_utt(self, utt_id):
-        '''
-        read the data of a certain utterance ID
-
-        Returns:
-            the utterance data corresponding to the ID
-        '''
-
-        return self.read_utt_data(self.utt_ids.index(utt_id))
-
-    def split(self):
-        '''Split of the data that was read so far'''
-
-        self.scp_data = self.scp_data[self.scp_position:-1]
-        self.utt_ids = self.utt_ids[self.scp_position:-1]
 
 
 def list_pad(list_t):

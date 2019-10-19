@@ -28,6 +28,7 @@ model:
     D:
         num_hidden: 512
         num_blocks: 5
+        max_label_len: 60
 
 opti:
     type: adam

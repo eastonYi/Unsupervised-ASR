@@ -4,18 +4,18 @@ dirs:
         scp: /data/sxu/easton/data/hkust/feats_3x.scp
         trans: /data/sxu/easton/data/hkust/pinyin.train_3x.scp
         # align: /home/user/easton/data/AISHELL/kaldi_gen/train.phone67.frame
-        tfdata: /data/sxu/easton/data/hkust/tfdata/train_pinyin
+        tfdata: /data/sxu/easton/data/hkust/tfdata/train_pinyin_x
     dev:
         scp: /data/sxu/easton/data/hkust/feats.dev.scp
         trans: /data/sxu/easton/data/hkust/pinyin.dev.scp
         # align: /home/user/easton/data/AISHELL/kaldi_gen/dev.phone67.frame
-        tfdata: /data/sxu/easton/data/hkust/tfdata/dev_pinyin
+        tfdata: /data/sxu/easton/data/hkust/tfdata/dev_pinyin_x
     test:
         scp: /data/sxu/easton/data/hkust/feats.dev.scp
         trans: /data/sxu/easton/data/hkust/pinyin.dev.scp
     type: scp
     vocab: /data/sxu/easton/data/hkust/pinyin_1385+1.vocab
-    checkpoint: /data/sxu/easton/projects/EODM/exps/hksut/hkust_CTC/checkpoint
+    # checkpoint: /data/sxu/easton/projects/EODM/exps/hksut/hkust_CTC/checkpoint
 
 data:
     featType: mfcc

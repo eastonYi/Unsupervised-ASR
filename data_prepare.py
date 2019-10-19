@@ -37,7 +37,7 @@ def main():
         align_file=None,
         feat_len_file=None,
         args=args,
-        _shuffle=False,
+        _shuffle=True,
         transform=False)
     dataset_dev = ASR_align_ArkDataSet(
         scp_file=args.dirs.dev.scp,
@@ -56,11 +56,11 @@ def main():
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    # feature_train.split_save(capacity=100000)
-    # feature_dev.save('0')
+    feature_train.split_save(capacity=100000)
+    feature_dev.split_save(capacity=100000)
     # feature_train_supervise.save('0')
 
-    get_bucket(args.dirs.train.tfdata / 'feature_length.txt', args.num_batch_tokens, 150)
+    # get_bucket(args.dirs.train.tfdata / 'feature_length.txt', args.num_batch_tokens, 550)
 
     # dataset_train = ASR_align_DataSet(
     #     trans_file=args.dirs.train.trans,

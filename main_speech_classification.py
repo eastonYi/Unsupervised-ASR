@@ -10,9 +10,132 @@ import sys
 import yaml
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
+from random import shuffle
 
-from utils.tools import TFData, mkdirs, get_tensor_len
+from utils.tools import mkdirs, get_tensor_len
 from utils.dataset import ASR_classify_ArkDataSet
+
+
+class TFData:
+    """
+    test on TF2.0
+    """
+    def __init__(self, dataset, dir_save, args, size_file=5000000, max_feat_len=3000):
+        self.dataset = dataset
+        self.max_feat_len = max_feat_len
+        self.dir_save = dir_save
+        self.args = args
+        self.size_file = size_file
+        self.dim_feature = dataset[0]['feature'].shape[-1] \
+            if dataset else self.read_tfdata_info(dir_save)['dim_feature']
+
+    def split_save(self, length_file='feature_length.txt', capacity=50000):
+        num_token = 0
+        num_damaged_sample = 0
+        fw = open(self.dir_save/length_file, 'w')
+
+        def serialize_example(feature, y):
+            atts = {
+                'feature': self._bytes_feature(feature.tostring()),
+                'class': self._int_feature(y),
+            }
+            example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
+
+            return example_proto.SerializeToString()
+
+        def generator():
+            nonlocal fw, i, capacity
+            # for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
+            for j in tqdm(range(i*capacity, min((i+1)*capacity, len(self.dataset)))):
+                sample = self.dataset[j]
+                line = sample['uttid'] + ' ' + str(len(sample['feature']))
+                fw.write(line + '\n')
+                yield serialize_example(sample['feature'], sample['class'])
+
+        for i in range(len(self.dataset)//capacity + 1):
+        # for i in [2,3,4]:
+            dataset_tf = tf.data.Dataset.from_generator(
+                generator=generator,
+                output_types=tf.string,
+                output_shapes=())
+            record_file = self.dir_save/'{}.recode'.format(i)
+            mkdirs(record_file)
+            writer = tf.data.experimental.TFRecordWriter(str(record_file))
+            writer.write(dataset_tf)
+
+        with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
+            fw.write('data_file {}\n'.format(self.dataset.file))
+            fw.write('dim_feature {}\n'.format(self.dim_feature))
+            fw.write('num_tokens {}\n'.format(num_token))
+            fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
+            fw.write('damaged samples: {}\n'.format(num_damaged_sample))
+
+        return
+
+    def read(self, _shuffle=False):
+        """
+        the tensor could run unlimitatly
+        return a iter
+        """
+        list_filenames = self.fentch_filelist(self.dir_save)
+        if _shuffle:
+            shuffle(list_filenames)
+        else:
+            list_filenames.sort()
+
+        raw_dataset = tf.data.TFRecordDataset(list_filenames)
+
+        def _parse_function(example_proto):
+            sample = tf.io.parse_single_example(
+                example_proto,
+                features={
+                    'feature': tf.io.FixedLenFeature([], tf.string),
+                    'class': tf.io.FixedLenFeature([], tf.int64)
+                }
+            )
+            feature = tf.reshape(tf.io.decode_raw(sample['feature'], tf.float32),
+                                 [-1, self.dim_feature])[:self.max_feat_len, :]
+            label = tf.reshape(sample['class'], [1])
+
+            return feature, label
+
+        feature = raw_dataset.map(_parse_function)
+
+        return feature
+
+    def __len__(self):
+        return self.read_tfdata_info(self.dir_save)['size_dataset']
+
+    @staticmethod
+    def fentch_filelist(dir_data):
+        p = Path(dir_data)
+        assert p.is_dir()
+
+        return [str(i) for i in p.glob('*.recode')]
+
+    @staticmethod
+    def _bytes_feature(value):
+        """Returns a bytes_list from a list of string / byte."""
+        return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+    @staticmethod
+    def _int_feature(value):
+        """Returns a int_list."""
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+    @staticmethod
+    def read_tfdata_info(dir_save):
+        data_info = {}
+        with open(dir_save/'tfdata.info') as f:
+            for line in f:
+                if 'dim_feature' in line or \
+                    'num_tokens' in line or \
+                    'size_dataset' in line:
+                    line = line.strip().split(' ')
+                    data_info[line[0]] = int(line[1])
+
+        return data_info
 
 
 class AttrDict(dict):
@@ -57,32 +180,39 @@ args.dirs.train.feat_len = args.dirs.train.tfdata/'feature_length.txt'
 args.dirs.dev.feat_len = args.dirs.dev.tfdata/'feature_length.txt'
 
 try:
-    args.dim_input = TFData.read_tfdata_info(args.dirs.train.tfdata)['dim_feature']
+    args.dim_input = TFData.read_tfdata_info(args.dirs.dev.tfdata)['dim_feature']
     args.data.train_size = TFData.read_tfdata_info(args.dirs.train.tfdata)['size_dataset']
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']
 except:
     print("have not converted to tfdata yet: ")
 
-# def Classifier(args):
-#     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
-#                                         name='generator_input_x')
-#
-#     for _ in range(2):
-#         x = tf.keras.layers.GRU(256,
-#                                 return_sequences=True,
-#                                 dropout=0.1)(x)
-#
-#     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
-#     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
-#     ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
-#     logits_c = tf.gather_nd(logits, ids)
-#     logits_c = tf.reshape(logits_c, [-1, args.dim_output])
-#
-#     model = tf.keras.Model(inputs=input_x,
-#                            outputs=logits_c,
-#                            name='sequence_generator')
-#
-#     return model
+
+def Classifier(args):
+    num_layers = 2
+    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+                                        name='generator_input_x')
+
+    for _ in range(num_layers):
+        x = tf.keras.layers.GRU(256,
+                                return_sequences=True,
+                                dropout=0.5)(x)
+        x = tf.keras.layers.MaxPooling1D()(x)
+
+    logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
+    len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
+    len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
+    # logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
+    #               [1, 1, args.dim_output])
+    ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
+    logits_c = tf.gather_nd(logits, ids)
+    logits_c = tf.reshape(logits_c, [-1, args.dim_output])
+
+    model = tf.keras.Model(inputs=input_x,
+                           outputs=logits,
+                           name='sequence_generator')
+
+    return model
+
 
 def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
     conv_op = tf.keras.layers.Conv1D(
@@ -95,47 +225,46 @@ def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
     return conv_op
 
 
-def Classifier(args):
-    dim_hidden = 12
-    # max_seq_len = 2000
-    num_layers = 5
-    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
-                                      name='discriminator_input_x')
-
-    x = tf.keras.layers.Dense(dim_hidden, use_bias=False, activation='linear')(x)
-
-    for i in range(num_layers):
-        inputs = x
-        x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
-        # x = tf.keras.layers.LayerNormalization()(x)
-        x = tf.keras.layers.ReLU()(x)
-        x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
-        # x = tf.keras.layers.LayerNormalization()(x)
-        x = tf.keras.layers.ReLU()(x)
-
-        x = inputs + (0.3*x)
-        x = tf.keras.layers.MaxPooling1D()(x)
-
-    for _ in range(1):
-        x = tf.keras.layers.GRU(56,
-                                return_sequences=True,
-                                dropout=0.1)(x)
-
-    logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
-    len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
-    len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
-    # len_x = tf.cast(tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32), -1)/
-    #                 tf.pow(2.0, num_layers), tf.int32)
-    # ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
-    # logits_c = tf.gather_nd(logits, ids)
-    # logits_c = tf.reshape(logits_c, [-1, args.dim_output])
-    logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
-                  [1, 1, args.dim_output])
-    model = tf.keras.Model(inputs=input_x,
-                           outputs=logits,
-                           name='sequence_discriminator')
-
-    return model
+# def Classifier(args):
+#     dim_hidden = 256
+#     num_layers = 5
+#     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+#                                       name='discriminator_input_x')
+#
+#     x = tf.keras.layers.Dense(dim_hidden, use_bias=False, activation='linear')(x)
+#
+#     for i in range(num_layers):
+#         inputs = x
+#         x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
+#         # x = tf.keras.layers.LayerNormalization()(x)
+#         x = tf.keras.layers.ReLU()(x)
+#         x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
+#         # x = tf.keras.layers.LayerNormalization()(x)
+#         x = tf.keras.layers.ReLU()(x)
+#
+#         x = inputs + (0.3*x)
+#         x = tf.keras.layers.MaxPooling1D()(x)
+#
+#     for _ in range(1):
+#         x = tf.keras.layers.GRU(128,
+#                                 return_sequences=True,
+#                                 dropout=0.1)(x)
+#
+#     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
+#     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
+#     len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
+#     # len_x = tf.cast(tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32), -1)/
+#     #                 tf.pow(2.0, num_layers), tf.int32)
+#     # ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
+#     # logits_c = tf.gather_nd(logits, ids)
+#     # logits_c = tf.reshape(logits_c, [-1, args.dim_output])
+#     logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
+#                   [1, 1, args.dim_output])
+#     model = tf.keras.Model(inputs=input_x,
+#                            outputs=logits,
+#                            name='sequence_discriminator')
+#
+#     return model
 
 
 def Train():
@@ -161,32 +290,24 @@ def Train():
 
     with tf.device("/cpu:0"):
         # wav data
-        TFData(dataset=dataset_train,
-               dir_save=args.dirs.train.tfdata,
-               args=args, max_feat_len=args.max_seq_len).split_save(capacity=1000)
-        TFData(dataset=dataset_dev,
-               dir_save=args.dirs.dev.tfdata,
-               args=args, max_feat_len=args.max_seq_len).save('0')
-        import pdb; pdb.set_trace()
+        # TFData(dataset=dataset_train,
+        #        dir_save=args.dirs.train.tfdata,
+        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=500)
+        # TFData(dataset=dataset_dev,
+        #        dir_save=args.dirs.dev.tfdata,
+        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=500)
+        # import pdb; pdb.set_trace()
 
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
-                        args=args, max_feat_len=2000).read()
+                        args=args, max_feat_len=args.max_seq_len).read()
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
-                        args=args, max_feat_len=2000).read()
-        # feature_dev = TFData(dataset=dataset_train,
-        #                 dir_save=args.dirs.train.tfdata,
-        #                 args=args).read()
-        # bucket = tf.data.experimental.bucket_by_sequence_length(
-        #     element_length_func=lambda uttid, x: tf.shape(x)[0],
-        #     bucket_boundaries=args.list_bucket_boundaries,
-        #     bucket_batch_sizes=args.list_batch_size,
-        #     padded_shapes=((), [None, args.dim_input]))
-        # iter_feature_train = iter(feature_train.repeat().shuffle(10).apply(bucket).prefetch(buffer_size=3))
+                        args=args, max_feat_len=args.max_seq_len).read()
         iter_feature_train = iter(feature_train.cache().repeat().shuffle(5).padded_batch(args.batch_size,
-                ((), [None, args.dim_input])).prefetch(buffer_size=2))
-        feature_dev = feature_dev.padded_batch(1, ((), [None, args.dim_input]))
+                ([None, args.dim_input], [1])).prefetch(buffer_size=2))
+        feature_train = feature_train.padded_batch(1, ([None, args.dim_input], [1]))
+        feature_dev = feature_dev.padded_batch(1, ([None, args.dim_input], [1]))
 
     # create model paremeters
     model = Classifier(args)
@@ -208,19 +329,17 @@ def Train():
     processed = 0
     while step < 999999:
         start = time()
-        uttids, x = next(iter_feature_train)
-        # y = dataset_train.get_y(uttids.numpy())
+        x, y = next(iter_feature_train)
         processed += len(x)
-        # loss = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
-        loss = 0
+        loss = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
         batch_time = time()-start
         if step % 10 == 0:
             print('loss: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.2f}% step: {}'.format(
                    loss, x.shape, batch_time, processed/args.data.train_size , step))
-        # if step % args.dev_step == 1:
-        #     # p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-        #     p = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
-        #     print('eval performance: {:.2f}%'.format(p*100))
+        if step % args.dev_step == 1:
+            p_train = evaluate(feature_train, dataset_train, args.data.train_size, model)
+            p_dev = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+            print('eval performance: train: {:.2f}% dev: {:.2f}%'.format(p_train*100, p_dev*100))
         if step % args.save_step == 0:
             save_path = ckpt_manager.save(step)
             print('save model {}'.format(save_path))
@@ -232,29 +351,29 @@ def Train():
 
 def evaluate(feature_dev, dataset_dev, dev_size, model):
     list_p = []
-    for uttids, x in feature_dev:
-        y = dataset_dev.get_y(uttids.numpy())
+    list_res = []
+    for x, y in tqdm(feature_dev):
+        y = y[0]
         logits = model(x)
-        _y = tf.argmax(tf.math.bincount(tf.argmax(logits, -1, output_type=tf.int32)))
+        _y = tf.argmax(tf.math.bincount(tf.argmax(logits, -1, output_type=tf.int32)),
+                       output_type=tf.int64)
         p = tf.cast(tf.equal(y, _y), tf.float32)
         list_p.append(p)
-
+        list_res.append((y.numpy()[0], _y.numpy()))
+    print(list_res[:30])
     return tf.reduce_mean(list_p)
+
 
 # @tf.function(experimental_relax_shapes=True)
 def train_G_supervised(x, y, model, optimizer_G, dim_output):
     with tf.GradientTape() as tape_G:
         # gen_loss = step(model, x, y, dim_output)
         logits = model(x, training=True)
-        try:
-            _y = tf.tile(y[:, None], [1, logits.shape[1]])
-        except:
-            import pdb; pdb.set_trace()
+        _y = tf.tile(y, [1, logits.shape[1]])
         gen_loss = CE_loss(logits, _y, dim_output, confidence=0.9)
 
-    # else:
-    # gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
-    # optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
+    gradients_G = tape_G.gradient(gen_loss, model.trainable_variables)
+    optimizer_G.apply_gradients(zip(gradients_G, model.trainable_variables))
 
     return gen_loss
 

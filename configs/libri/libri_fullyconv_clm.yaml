@@ -1,0 +1,49 @@
+dirs:
+    exp: libri
+    train:
+        scp: /mnt/lustre/xushuang2/easton/data/libriSpeech/feats/feats.train-960.scp
+        trans: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/train-100.trans
+        tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/train-100_x
+    dev:
+        scp: /mnt/lustre/xushuang2/easton/data/libriSpeech/feats/feats.dev-clean.scp
+        trans: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/dev-clean.trans
+        tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/dev-clean_x
+    test:
+        scp: /mnt/lustre/xushuang2/easton/data/libriSpeech/feats/feats.test-clean.scp
+        trans: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/test-clean.trans
+        tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/test-clean_x
+    lm:
+        data: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/text-960.txt
+    type: scp
+    vocab: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/subword_3724+1.vocab
+    checkpoint_G: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_fullyconv/checkpoint
+
+data:
+    featType: mfcc
+    left_context: 0
+    right_context: 0
+    downsample: 1
+    add_delta: False
+    unit: subword
+
+model:
+    G:
+        num_hidden: 1024
+    D:
+        num_hidden: 512
+        num_blocks: 5
+        max_label_len: 60
+opti:
+    type: adam
+    lr: 0.0003
+    decay_steps: 10000
+
+dev_step: 600
+decode_step: 600
+save_step: 600
+
+gpus: '0'
+batch_size: 40
+num_supervised:
+num_batch_tokens: 25000
+bucket_boundaries: 689,995,1165,1253,1309,1352,1387,1417,1444,1467,1488,1510,1530,1551,1572,1595,1641,1800

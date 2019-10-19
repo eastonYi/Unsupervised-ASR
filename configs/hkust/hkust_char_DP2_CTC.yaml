@@ -1,0 +1,46 @@
+dirs:
+    exp: hksut
+    train:
+        scp: /mnt/lustre/xushuang2/easton/data/hkust/feats_3x.scp
+        trans: /mnt/lustre/xushuang2/easton/data/hkust/char.train_3x.scp
+        tfdata: /mnt/lustre/xushuang2/easton/data/hkust/tfdata/train_pinyin
+    dev:
+        scp: /mnt/lustre/xushuang2/easton/data/hkust/feats.dev.scp
+        trans: /mnt/lustre/xushuang2/easton/data/hkust/char.dev.scp
+        tfdata: /mnt/lustre/xushuang2/easton/data/hkust/tfdata/dev_pinyin
+    test:
+        scp: /mnt/lustre/xushuang2/easton/data/hkust/feats.dev.scp
+        trans: /mnt/lustre/xushuang2/easton/data/hkust/char.dev.scp
+    type: scp
+    vocab: /mnt/lustre/xushuang2/easton/data/hkust/char_3673+1.vocab
+    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/hksut/hkust_char_CTC/test1/checkpoint
+
+data:
+    featType: mfcc
+    left_context: 0
+    right_context: 0
+    downsample: 1
+    add_delta: False
+    unit: word
+
+model:
+    rnn_type: GRU
+    is_bidirectional: True
+    num_rnn_layers: 4
+    rnn_hidden_size: 1024
+    num_filters: 64
+    use_bias: True
+opti:
+    type: adam
+    lr: 0.0001
+
+dev_step: 200
+decode_step: 200
+save_step: 200
+
+gpus: '0'
+batch_size: 60
+num_supervised:
+num_batch_tokens: 30000
+bucket_boundaries: 172,231,278,321,364,407,457,518,604,766,2083,4264
+seed: 8

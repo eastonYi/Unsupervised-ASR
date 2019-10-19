@@ -1,17 +1,15 @@
 # coding=utf-8
 
-import os
 import numpy as np
 import logging
 from collections import defaultdict, Counter
-from tqdm import tqdm
-from random import shuffle, random, randint
+from random import shuffle
 import multiprocessing
 import tensorflow as tf
 from pathlib import Path
 from abc import ABCMeta, abstractmethod
 
-from .dataProcess import audio2vector, get_audio_length, process_raw_feature, splice, down_sample
+from .dataProcess import audio2vector, process_raw_feature, splice, down_sample
 from .tools import align2stamp, align2bound
 
 logging.basicConfig(level=logging.DEBUG,format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
@@ -239,7 +237,7 @@ class ASR_align_ArkDataSet(ASRDataSet):
     def __getitem__(self, id):
         uttid = self.list_uttids[id]
 
-        feat = self.reader.read_utt_data(id)
+        feat = self.reader.read_utt_data(uttid)
         if self.transform:
             feat = process_raw_feature(feat, self.args)
 
@@ -281,7 +279,11 @@ class ASR_align_ArkDataSet(ASRDataSet):
                     feat = process_raw_feature(feat, self.args)
                 res = feat
             elif attr == 'trans':
-                trans = self.dict_trans[uttid]
+                try:
+                    trans = self.dict_trans[uttid]
+                except:
+                    print('Not found {}'.format(uttid))
+                    trans = np.array([4])
                 res = trans
             elif attr == 'align':
                 align = self.dict_aligns[uttid]
@@ -424,12 +426,13 @@ class ASR_classify_ArkDataSet(ASRDataSet):
         self.reader = ArkReader(scp_file)
         self.dict_y, self.dict_class = self.load_y(class_file)
         self.list_uttids = list(self.dict_y.keys())
+        if _shuffle:
+            shuffle(self.list_uttids)
 
     def __getitem__(self, id):
         uttid = self.list_uttids[id]
         feat = self.reader.read_utt_data(id)
-        # feat = feat[::3, :]
-        feat = down_sample(splice(feat, 2, 0), 3)
+        # feat = down_sample(splice(feat, 2, 0), 3)
         y = self.dict_y[uttid]
 
         sample = {'uttid': uttid,

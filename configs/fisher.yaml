@@ -1,22 +1,32 @@
 dirs:
     exp: fisher
+    # train:
+    #     scp: /mnt/lustre/xushuang2/easton/data/fisher/train/feats.scp.train
+    #     label: /mnt/lustre/xushuang2/easton/data/fisher/train/label_01_02_03.train
+    #     tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/train_div3
+    #     # tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/train_splice3
+    # dev:
+    #     scp: /mnt/lustre/xushuang2/easton/data/fisher/test/feats.scp.test
+    #     label: /mnt/lustre/xushuang2/easton/data/fisher/test/label_01_02_03.test
+    #     tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/test_div3
+    #     # tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/test_splice3
+    # test:
+    #     scp: /mnt/lustre/xushuang2/easton/data/fisher/test/feats.scp.test
+    #     label: /mnt/lustre/xushuang2/easton/data/fisher/test/label_01_02_03.test
     train:
-        scp: /data/sxu/easton/data/fisher/train/feats.scp.train
-        label: /data/sxu/easton/data/fisher/train/label.train
-        tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3
-        # label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
-        # tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
+        scp: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/feats.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/train/label.train
+        tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/train_AB
+        # tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/train_splice3
     dev:
-        scp: /data/sxu/easton/data/fisher/test/feats.scp.test
-        label: /data/sxu/easton/data/fisher/test/label_01_02_03.test
-        tfdata: /data/sxu/easton/data/fisher/tfdata/test_div3
-        # scp: /data/sxu/easton/data/fisher/train/feats.scp.train
-        # label: /data/sxu/easton/data/fisher/train/label_01_02_03.train
-        # tfdata: /data/sxu/easton/data/fisher/tfdata/train_div3_01_02_03
+        scp: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/feats.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/test/label.test
+        tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/test_AB
+        # tfdata: /mnt/lustre/xushuang2/easton/data/fisher/tfdata/test_splice3
     test:
-        scp: /data/sxu/easton/data/fisher/test/feats.scp.test
-        label: /data/sxu/easton/data/fisher/test/label_01_02_03.test
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/fisher/fisher/checkpoint
+        scp: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/feats.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/fisher/Fisher-p1/3c-02-03-04/test/label.test
+    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/fisher/fisher/checkpoint
 
 data:
     unit: phone
@@ -30,8 +40,8 @@ decode_step: 200
 save_step: 500
 
 gpus: '0'
-batch_size: 80
+batch_size: 30
 
-max_seq_len: 6000
+max_seq_len: 10000
 num_batch_tokens: 1000
 bucket_boundaries: 81,93,105,118,138,178,260
