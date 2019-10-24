@@ -7,30 +7,6 @@ from pathlib import Path
 
 
 def main():
-    # dataset_train = ASR_align_DataSet(
-    #     trans_file=args.dirs.train.trans,
-    #     uttid2wav=args.dirs.train.wav_scp,
-    #     align_file=None,
-    #     feat_len_file=None,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
-    # dataset_train_supervise = ASR_align_DataSet(
-    #     trans_file=args.dirs.train_supervise.trans,
-    #     uttid2wav=args.dirs.train_supervise.wav_scp,
-    #     align_file=None,
-    #     feat_len_file=None,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
-    # dataset_dev = ASR_align_DataSet(
-    #     trans_file=args.dirs.dev.trans,
-    #     uttid2wav=args.dirs.dev.wav_scp,
-    #     align_file=None,
-    #     feat_len_file=None,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
     dataset_train = ASR_align_ArkDataSet(
         scp_file=args.dirs.train.scp,
         trans_file=args.dirs.train.trans,
@@ -47,8 +23,19 @@ def main():
         args=args,
         _shuffle=False,
         transform=False)
+    dataset_untrain = ASR_align_ArkDataSet(
+        scp_file=args.dirs.untrain.scp,
+        trans_file=None,
+        align_file=None,
+        feat_len_file=None,
+        args=args,
+        _shuffle=True,
+        transform=False)
     feature_train = TFData(dataset=dataset_train,
                     dir_save=args.dirs.train.tfdata,
+                    args=args)
+    feature_untrain = TFData(dataset=dataset_untrain,
+                    dir_save=args.dirs.untrain.tfdata,
                     args=args)
     # feature_train_supervise = TFData(dataset=dataset_train_supervise,
     #                 dir_save=args.dirs.train_supervise.tfdata,
@@ -56,8 +43,9 @@ def main():
     feature_dev = TFData(dataset=dataset_dev,
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
-    feature_train.split_save(capacity=100000)
-    feature_dev.split_save(capacity=100000)
+    # feature_train.split_save(capacity=100000)
+    # feature_dev.split_save(capacity=100000)
+    feature_untrain.split_save(capacity=100000)
     # feature_train_supervise.save('0')
 
     # get_bucket(args.dirs.train.tfdata / 'feature_length.txt', args.num_batch_tokens, 550)

@@ -309,6 +309,51 @@ def align_shrink(align):
     return list_tokens
 
 
+def ctc_shrink(distribution, blk, max_label_len):
+    batch_size, len_time, dim_output = distribution.shape
+    # batch_size = tf.shape(distribution)[0]
+    # len_time = tf.shape(distribution)[1]
+    # dim_output = tf.shape(distribution)[2]
+    tokens = tf.argmax(distribution, -1)
+    # intermediate vars along time
+    list_fires = []
+    token_prev = tf.ones((batch_size), tf.int64) * -1
+    blk_batch = tf.cast(tf.ones((batch_size), tf.int32) * (blk-1), tf.int64)
+    pad_batch = tf.zeros((batch_size), tf.int64)
+
+    for t in tf.range(len_time):
+        token = tokens[:, t]
+        fire_place = tf.logical_and(token != blk_batch, token != token_prev)
+        fire_place = tf.logical_and(fire_place, token != pad_batch)
+        list_fires.append(fire_place)
+        token_prev = token
+
+    fires = tf.stack(list_fires, 1)
+    list_ls = []
+    # len_labels = tf.reduce_sum(tf.cast(fires, tf.int32), -1)
+    # max_label_len = tf.reduce_max(len_labels)
+    for b in tf.range(batch_size):
+        l = tf.gather_nd(distribution[b, :, :], tf.where(fires[b]))[:max_label_len, :]
+        pad_l = tf.zeros([max_label_len-tf.shape(l)[0], dim_output])
+        list_ls.append(tf.concat([l, pad_l], 0))
+
+    distribution_shrunk = tf.stack(list_ls, 0)
+    # import pdb; pdb.set_trace()
+    # print('e')
+    return distribution_shrunk
+
+
+def pad_to(tensor, length):
+    len_tensor = tensor.shape[1]
+    max_len = tf.reduce_max([length, len_tensor])
+    pad_shape = list(tensor.shape)
+    pad_shape[1] = max_len - len_tensor
+    pad = tf.zeros(pad_shape, dtype=tensor.dtype)
+    tensor_padded = tf.concat([tensor, pad], 1)
+
+    return tensor_padded
+
+
 def batch_cer(preds, reference):
     """
     preds, reference: align type
@@ -379,9 +424,8 @@ def gradient_penalty(D, real, fake, mask_real=None, mask_fake=None):
         x = _interpolate(real[:, :min_len, :], fake[:, :min_len, :])
         mask = tf.logical_and(mask_real[:, :min_len], mask_fake[:, :min_len])
     else:
-        assert real.shape == fake.shape
+        # assert real.shape == fake.shape
         x = _interpolate(real, fake)
-        mask = None
 
     with tf.GradientTape() as t:
         t.watch(x)

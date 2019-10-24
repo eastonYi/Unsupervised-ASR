@@ -73,6 +73,13 @@ except:
     print("not found train_supervise")
 
 try:
+    args.dirs.untrain.tfdata = Path(args.dirs.untrain.tfdata)
+    mkdirs(args.dirs.untrain.tfdata)
+    args.dirs.untrain.feat_len = args.dirs.untrain.tfdata/'feature_length.txt'
+except:
+    print("not found train_supervise")
+
+try:
     args.dim_input = TFData.read_tfdata_info(args.dirs.train.tfdata)['dim_feature']
     args.data.train_size = TFData.read_tfdata_info(args.dirs.train.tfdata)['size_dataset']
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']

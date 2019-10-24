@@ -1,17 +1,46 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Reshape, \
-    Conv2D, Input, MaxPooling2D, LayerNormalization, ReLU, MaxPool1D
 import numpy as np
+from tensorflow.keras.layers import Input, Dense, Reshape, Bidirectional, \
+    Conv2D, LayerNormalization, ReLU, GRU, LSTM, MaxPool1D, MaxPooling2D
+
 from utils.tools import get_tensor_len
 
 
-def conv_lstm(args):
-    num_hidden = args.model.G.num_hidden
-    num_filters = args.model.G.num_filters
-    size_feat = args.dim_input
-    dim_output = args.dim_output
+def Res_Conv(args):
+    num_hidden = args.model.G.encoder.num_hidden
 
-    input_x = Input(shape=[None, args.dim_input], name='conv_lstm_input')
+    input_x = Input(shape=[None, args.dim_input], name='encoder_input')
+    len_seq = get_tensor_len(input_x)
+    x = Dense(num_hidden, use_bias=False, activation='linear', name="encoder/fc_1")(input_x)
+
+    for i in range(3):
+        inputs = x
+        x = Conv1D(dim_output=num_hidden, kernel_size=5)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = ReLU()(x)
+        x = Conv1D(dim_output=num_hidden, kernel_size=5)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = ReLU()(x)
+        x = inputs + (0.3*x)
+        x = MaxPool1D(pool_size=2, padding='SAME')(x)
+        len_seq = tf.cast(tf.math.ceil(tf.cast(len_seq, tf.float32)/2), tf.int32)
+
+    encoded = x
+    pad_mask = tf.tile(tf.expand_dims(tf.sequence_mask(len_seq, dtype=tf.float32), -1),
+                       [1, 1, num_hidden])
+    encoded *= pad_mask
+
+    encoder = tf.keras.Model(input_x, encoded, name='encoder')
+
+    return encoder
+
+
+def Conv_LSTM(args):
+    num_hidden = args.model.G.encoder.num_hidden
+    num_filters = args.model.G.encoder.num_filters
+    size_feat = args.dim_input
+
+    input_x = Input(shape=[None, args.dim_input], name='encoder_input')
     size_length = tf.shape(input_x)[1]
     size_feat = int(size_feat/3)
     len_feats = get_tensor_len(input_x)
@@ -55,14 +84,17 @@ def conv_lstm(args):
     x = Bidirectional(LSTM(num_hidden//2, return_sequences=True))(x)
     x, len_seq = pooling(x, len_seq, num_hidden, 'SAME')
 
-    logits = Dense(dim_output)(x)
-    pad_mask = tf.tile(tf.expand_dims(tf.sequence_mask(len_seq, dtype=tf.float32), -1), [1, 1, dim_output])
-    logits *= pad_mask
+    encoded = x
+    pad_mask = tf.tile(tf.expand_dims(tf.sequence_mask(len_seq, dtype=tf.float32), -1),
+                       [1, 1, num_hidden])
+    encoded *= pad_mask
 
-    model = tf.keras.Model(input_x, logits,
-                           name='conv_lstm_output')
+    encoder = tf.keras.Model(input_x, encoded, name='encoder')
 
-    return model
+    return encoder
+
+
+## building blocks
 
 def normal_conv(x, filter_num, kernel, stride, padding):
 

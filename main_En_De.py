@@ -7,18 +7,18 @@ os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 import numpy as np
 
-from utils.tools import TFData, batch_cer, gradient_penalty, pad_to, ctc_shrink, get_tensor_len
+from utils.tools import TFData
 from utils.arguments import args
-from utils.dataset import ASR_align_ArkDataSet, TextDataSet
+from utils.dataset import ASR_align_ArkDataSet
+from utils.tools import batch_cer
 
-from models.discriminator.clm import CLM
 if args.model.G.encoder.type == 'res_conv':
     from models.encoders import Res_Conv as Encoder
 elif args.model.G.encoder.type == 'conv_lstm':
     from models.encoders import Conv_LSTM as Encoder
 
-if args.model.G.decoder.type == 'gru':
-    from models.decoders import GRU_FC as Decoder
+if args.model.G.decoder.type == 'rnn':
+    from models.decoders import RNN_FC as Decoder
 elif args.model.G.decoder.type == 'fc':
     from models.decoders import Fully_Connected as Decoder
 
@@ -27,19 +27,10 @@ tf.random.set_seed(args.seed)
 
 
 def Train():
-    args.data.untrain_size = TFData.read_tfdata_info(args.dirs.untrain.tfdata)['size_dataset']
     with tf.device("/cpu:0"):
         dataset_train = ASR_align_ArkDataSet(
             scp_file=args.dirs.train.scp,
             trans_file=args.dirs.train.trans,
-            align_file=None,
-            feat_len_file=None,
-            args=args,
-            _shuffle=False,
-            transform=False)
-        dataset_untrain = ASR_align_ArkDataSet(
-            scp_file=args.dirs.untrain.scp,
-            trans_file=None,
             align_file=None,
             feat_len_file=None,
             args=args,
@@ -57,9 +48,6 @@ def Train():
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
                         args=args).read()
-        feature_unsupervise = TFData(dataset=dataset_untrain,
-                        dir_save=args.dirs.untrain.tfdata,
-                        args=args).read()
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
                         args=args).read()
@@ -68,72 +56,54 @@ def Train():
             bucket_boundaries=args.list_bucket_boundaries,
             bucket_batch_sizes=args.list_batch_size,
             padded_shapes=((), [None, args.dim_input]))
-        iter_feature_train = iter(feature_train.repeat().shuffle(100).apply(bucket).prefetch(buffer_size=5))
-        # iter_feature_unsupervise = iter(feature_unsupervise.repeat().shuffle(100).apply(bucket).prefetch(buffer_size=5))
-        # iter_feature_train = iter(feature_train.repeat().shuffle(100).padded_batch(args.batch_size,
+        iter_feature_train = iter(feature_train.repeat().shuffle(10).apply(bucket).prefetch(buffer_size=5))
+        # iter_feature_train = iter(feature_train.repeat().shuffle(500).padded_batch(args.batch_size,
         #         ((), [None, args.dim_input])).prefetch(buffer_size=5))
-        iter_feature_unsupervise = iter(feature_unsupervise.repeat().shuffle(100).padded_batch(args.batch_size,
-                ((), [None, args.dim_input])).prefetch(buffer_size=5))
         # feature_dev = feature_dev.apply(bucket).prefetch(buffer_size=5)
         feature_dev = feature_dev.padded_batch(args.batch_size, ((), [None, args.dim_input]))
-
-        dataset_text = TextDataSet(list_files=[args.dirs.lm.data], args=args, _shuffle=True)
-        tfdata_train = tf.data.Dataset.from_generator(
-            dataset_text, (tf.int32), (tf.TensorShape([None])))
-        iter_text = iter(tfdata_train.cache().repeat().shuffle(1000).map(
-            lambda x: x[:args.model.D.max_label_len]).padded_batch(args.text_batch_size, ([args.model.D.max_label_len])).prefetch(buffer_size=5))
 
     # create model paremeters
     encoder = Encoder(args)
     decoder = Decoder(args)
-    D = CLM(args)
     encoder.summary()
     decoder.summary()
-    D.summary()
-    optimizer = tf.keras.optimizers.Adam(0.0001, beta_1=0.5, beta_2=0.9)
-    optimizer_D = tf.keras.optimizers.Adam(0.0001, beta_1=0.5, beta_2=0.9)
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #     args.opti.lr,
+    #     decay_steps=args.opti.decay_steps,
+    #     decay_rate=0.5,
+    #     staircase=True)
+    optimizer = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.9, beta_2=0.98)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
-    ckpt_G = tf.train.Checkpoint(encoder=encoder, decoder=decoder)
-    ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dir_checkpoint, max_to_keep=20)
+    ckpt = tf.train.Checkpoint(encoder=encoder, decoder=decoder)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, args.dir_checkpoint, max_to_keep=20)
     step = 0
 
     # if a checkpoint exists, restore the latest checkpoint.
-    if args.dirs.checkpoint_G:
-        _ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dirs.checkpoint_G, max_to_keep=1)
-        ckpt_G.restore(_ckpt_manager.latest_checkpoint)
-        print('checkpoint_G {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+    if args.dirs.checkpoint:
+        _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+        ckpt.restore(_ckpt_manager.latest_checkpoint)
+        print('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
         step = int(_ckpt_manager.latest_checkpoint.split('-')[-1])
-        # cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, encoder, decoder)
-        # with writer.as_default():
-        #     tf.summary.scalar("performance/cer", cer, step=step)
 
     start_time = datetime.now()
     num_processed = 0
     while step < 99999999:
         start = time()
 
-        # supervise training
         uttids, x = next(iter_feature_train)
         trans = dataset_train.get_attrs('trans', uttids.numpy())
         loss_supervise = train_CTC_supervised(x, trans, encoder, decoder, optimizer)
 
-        # unsupervise training
-        text = next(iter_text)
-        _, un_x = next(iter_feature_unsupervise)
-        # loss_G = train_G(un_x, encoder, decoder, D, optimizer, args.model.D.max_label_len)
-        loss_G = train_G(un_x, encoder, decoder, D, optimizer, args.model.D.max_label_len)
-        loss_D = train_D(un_x, text, encoder, decoder, D, optimizer_D, args.lambda_gp, args.model.D.max_label_len)
-
-        num_processed += len(un_x)
-        progress = num_processed / args.data.untrain_size
+        num_processed += len(x)
+        progress = num_processed / args.data.train_size
 
         if step % 10 == 0:
-            print('loss_supervise: {:.3f}\tloss_G: {:.3f}\tloss_D: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.3f}% step: {}'.format(
-                   loss_supervise, loss_G, loss_D, un_x.shape, time()-start, progress*100, step))
+            print('loss: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.3f}% step: {}'.format(
+                   loss_supervise, x.shape, time()-start, progress*100, step))
             with writer.as_default():
                 tf.summary.scalar("costs/loss_supervise", loss_supervise, step=step)
-        if step % args.dev_step == args.dev_step-1:
+        if step % args.dev_step == 0:
             cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, encoder, decoder)
             with writer.as_default():
                 tf.summary.scalar("performance/cer", cer, step=step)
@@ -164,14 +134,13 @@ def Decode(save_file):
 
     encoder = Encoder(args)
     decoder = Decoder(args)
-    D = CLM(args)
     encoder.summary()
     decoder.summary()
-    D.summary()
 
-    ckpt_G = tf.train.Checkpoint(encoder=encoder, decoder=decoder)
-    _ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dirs.checkpoint, max_to_keep=1)
-    ckpt_G.restore(_ckpt_manager.latest_checkpoint)
+    ckpt = tf.train.Checkpoint(encoder=encoder, decoder=decoder)
+
+    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(_ckpt_manager.latest_checkpoint)
     print ('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
     cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, encoder, decoder)
     print('PER:{:.3f}'.format(cer))
@@ -216,11 +185,16 @@ def ctc_decode(logits, len_logits, beam_size=1):
     return preds
 
 
+def get_logits_len(logits):
+
+    return tf.reduce_sum(tf.cast((tf.reduce_max(tf.abs(logits), -1) > 0), tf.int32), -1)
+
+
 def monitor(sample, encoder, decoder):
     x = np.array([sample['feature']], dtype=np.float32)
     encoded = encoder(x)
     logits = decoder(encoded)
-    len_logits = get_tensor_len(logits)
+    len_logits = get_logits_len(logits)
     preds = ctc_decode(logits, len_logits)
 
     print('predicts: \n', preds.numpy()[0])
@@ -236,9 +210,9 @@ def evaluate(feature, dataset, dev_size, encoder, decoder):
     for batch in feature:
         uttids, x = batch
         # preds = forward(x, model)
-        encoded = encoder(x, training=False)
-        logits = decoder(encoded, training=False)
-        len_logits = get_tensor_len(logits)
+        encoded = encoder(x)
+        logits = decoder(encoded)
+        len_logits = get_logits_len(logits)
         preds = ctc_decode(logits, len_logits)
         trans = dataset.get_attrs('trans', uttids.numpy())
         batch_cer_dist, batch_cer_len, batch_res_len = batch_cer(preds.numpy(), trans)
@@ -247,6 +221,7 @@ def evaluate(feature, dataset, dev_size, encoder, decoder):
         total_res_len += batch_res_len
 
         num_processed += len(x)
+        print('infering {} / {} ...'.format(num_processed, dev_size))
 
     cer = total_cer_dist/total_cer_len
     print('dev PER: {:.3f}\t{} / {}'.format(cer, num_processed, dev_size))
@@ -260,7 +235,7 @@ def train_CTC_supervised(x, labels, encoder, decoder, optimizer):
     with tf.GradientTape() as tape:
         encoded = encoder(x, training=True)
         logits = decoder(encoded, training=True)
-        len_logits = get_tensor_len(logits)
+        len_logits = get_logits_len(logits)
         len_labels = tf.reduce_sum(tf.cast(labels > 0, tf.int32), -1)
         loss = ctc_loss(logits, len_logits, labels, len_labels)
         loss = tf.reduce_mean(loss)
@@ -269,42 +244,6 @@ def train_CTC_supervised(x, labels, encoder, decoder, optimizer):
     optimizer.apply_gradients(zip(gradients, vars))
 
     return loss
-
-
-# @tf.function(experimental_relax_shapes=True)
-def train_G(x, encoder, decoder, D, optimizer, len_D):
-    vars_G = encoder.trainable_variables + decoder.trainable_variables
-    with tf.GradientTape() as tape:
-        encoded = encoder(x, training=True)
-        logits = decoder(encoded, training=True)
-        P_Fake = ctc_shrink(tf.nn.softmax(logits), tf.shape(logits)[-1], len_D)
-
-        disc_fake = D(P_Fake, training=False)
-        loss_G = -tf.reduce_mean(disc_fake)
-
-    gradients = tape.gradient(loss_G, vars_G)
-    optimizer.apply_gradients(zip(gradients, vars_G))
-
-    return loss_G
-
-# @tf.function(experimental_relax_shapes=True)
-def train_D(x, text, encoder, decoder, D, optimizer, lambda_gp, len_D):
-    P_Real = tf.one_hot(text, args.dim_output)
-    with tf.GradientTape() as tape:
-        encoded = encoder(x, training=False)
-        logits = decoder(encoded, training=False)
-        P_Fake = ctc_shrink(tf.nn.softmax(logits), tf.shape(logits)[-1], len_D)
-        disc_fake = D(P_Fake, training=True)
-        disc_real = D(P_Real, training=True)
-        loss_D = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
-        idx = tf.random.uniform((), maxval=(tf.shape(P_Real)[0]-tf.shape(P_Fake)[0]), dtype=tf.int32)
-        gp = gradient_penalty(D, P_Real[idx:idx+tf.shape(P_Fake)[0]], P_Fake)
-        loss_D += lambda_gp * gp
-
-    gradients = tape.gradient(loss_D, D.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, D.trainable_variables))
-
-    return loss_D
 
 
 if __name__ == '__main__':

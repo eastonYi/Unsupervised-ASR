@@ -9,7 +9,6 @@ import logging
 import sys
 import yaml
 from pathlib import Path
-import numpy as np
 from tqdm import tqdm
 from random import shuffle
 
@@ -201,8 +200,7 @@ def Classifier(args):
     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
     len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
-    # logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
-    #               [1, 1, args.dim_output])
+
     ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
     logits_c = tf.gather_nd(logits, ids)
     logits_c = tf.reshape(logits_c, [-1, args.dim_output])
@@ -225,48 +223,6 @@ def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
     return conv_op
 
 
-# def Classifier(args):
-#     dim_hidden = 256
-#     num_layers = 5
-#     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
-#                                       name='discriminator_input_x')
-#
-#     x = tf.keras.layers.Dense(dim_hidden, use_bias=False, activation='linear')(x)
-#
-#     for i in range(num_layers):
-#         inputs = x
-#         x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
-#         # x = tf.keras.layers.LayerNormalization()(x)
-#         x = tf.keras.layers.ReLU()(x)
-#         x = Conv1D(dim_output=dim_hidden, kernel_size=5)(x)
-#         # x = tf.keras.layers.LayerNormalization()(x)
-#         x = tf.keras.layers.ReLU()(x)
-#
-#         x = inputs + (0.3*x)
-#         x = tf.keras.layers.MaxPooling1D()(x)
-#
-#     for _ in range(1):
-#         x = tf.keras.layers.GRU(128,
-#                                 return_sequences=True,
-#                                 dropout=0.1)(x)
-#
-#     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
-#     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
-#     len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
-#     # len_x = tf.cast(tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32), -1)/
-#     #                 tf.pow(2.0, num_layers), tf.int32)
-#     # ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
-#     # logits_c = tf.gather_nd(logits, ids)
-#     # logits_c = tf.reshape(logits_c, [-1, args.dim_output])
-#     logits *= tf.tile(tf.expand_dims(tf.sequence_mask(len_x, tf.shape(logits)[1], tf.float32), -1),
-#                   [1, 1, args.dim_output])
-#     model = tf.keras.Model(inputs=input_x,
-#                            outputs=logits,
-#                            name='sequence_discriminator')
-#
-#     return model
-
-
 def Train():
     dataset_train = ASR_classify_ArkDataSet(
         scp_file=args.dirs.train.scp,
@@ -278,12 +234,6 @@ def Train():
         class_file=args.dirs.dev.label,
         args=args,
         _shuffle=False)
-    # dataset_dev = ASR_classify_DataSet(
-    #     dir_wavs=args.dirs.wav,
-    #     class_file=args.dirs.train.label,
-    #     args=args,
-    #     _shuffle=False,
-    #     transform=True)
 
     args.vocab = dataset_train.dict_class
     args.dim_output = len(args.vocab)
@@ -400,6 +350,74 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     return loss
 
 
+def Infer():
+    dataset_dev = ASR_classify_ArkDataSet(
+        scp_file=args.dirs.dev.scp,
+        class_file=args.dirs.dev.label,
+        args=args,
+        _shuffle=False)
+
+    args.vocab = dataset_dev.dict_class
+    args.dim_output = len(args.vocab)
+
+    with tf.device("/cpu:0"):
+        feature_dev = TFData(dataset=dataset_dev,
+                             dir_save=args.dirs.dev.tfdata,
+                             args=args, max_feat_len=args.max_seq_len).read()
+        feature_dev = feature_dev.padded_batch(1, ([None, args.dim_input], [1]))
+
+    # create model paremeters
+    model = Classifier(args)
+    model.summary()
+    optimizer_G = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
+
+    ckpt = tf.train.Checkpoint(model=model, optimizer_G=optimizer_G)
+
+    _ckpt_manager = tf.train.CheckpointManager(ckpt, args.dirs.checkpoint, max_to_keep=1)
+    ckpt.restore(_ckpt_manager.latest_checkpoint)
+    print('checkpoint {} restored!!'.format(_ckpt_manager.latest_checkpoint))
+
+    # p_train = evaluate(feature_train, dataset_train, args.data.train_size, model)
+    p_dev = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
+    print('dev acc: {:.3f}%'.format(p_dev*100))
+
+
+def wav2class(model, wav_file='ex.wav'):
+    os.system('. extract_feat/path.sh')
+    os.system('. extract_feat/cmd.sh')
+    os.system('mkdir extract_feat/tmp/data -p')
+    os.system('mkdir extract_feat/tmp/fbank80 -p')
+    os.system('mkdir extract_feat/tmp/fbank_lef_sub -p')
+    os.system('touch extract_feat/tmp/data/wav.scp')
+    os.system('touch extract_feat/tmp/data/utt2spk')
+
+    name = wav_file.split('/')[-1]
+    with open('extract_feat/tmp/data/wav.scp', 'w') as wavscp, open('extract_feat/tmp/data/utt2spk', 'w') as utt2spk:
+        wavscp.write(name + ' ' + wav_file)
+        utt2spk.write(name + ' ' + name)
+
+    os.system('cp extract_feat/tmp/data/utt2spk extract_feat/tmp/data/spk2utt')
+    os.system('cp extract_feat/tmp/data/utt2spk extract_feat/tmp/data/text')
+    os.system('bash extract_feat/run_fbank.sh')
+    os.system('splice-feats --left-context=64 --right-context=0 scp:extract_feat/tmp/data/feats.scp ark:- | subsample-feats --n=64 ark:- ark,scp:`pwd`/extract_feat/tmp/fbank_lef_sub/cmvn_lef64_sub64.ark,`pwd`/extract_feat/tmp/fbank_lef_sub/cmvn_lef64_sub64.scp')
+    scp_path = sys.path[0] + '/extract_feat/tmp/fbank_lef_sub/cmvn_lef64_sub64.scp'
+
+    from tools import ArkReader
+    scp_reader = ArkReader(scp_path)
+    feats = scp_reader.read_utt_data(name)
+    print('extract feats success!')
+
+    x = tf.expand_dims(feats, 0)
+    if len(x) < 2:
+        x = tf.concat([x, x], 0)
+    logits = model(x, training=False)
+    _y = tf.argmax(tf.math.bincount(tf.argmax(logits, -1, output_type=tf.int32)),
+                   output_type=tf.int64).numpy()
+
+    return _y
+
+
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
 
@@ -428,3 +446,27 @@ if __name__ == '__main__':
             if not args.dir_checkpoint.is_dir(): args.dir_checkpoint.mkdir()
         print('enter the TRAINING phrase')
         Train()
+    elif param.mode == 'infer':
+        Infer()
+    elif param.mode == 'online':
+        assert args.dirs.checkpoint
+        from flask import Flask
+        from flask import request
+
+        app = Flask(__name__)
+
+        args.dim_output = 3
+        model = Classifier(args)
+
+        @app.route('/', methods=['POST'])
+        def evaluator():
+            f = request.files['file']
+            filename = f.filename
+            file_name = 'extract_feat/' + filename
+            f.save(file_name)
+            # result = 'save ' + file_name + 'success!'
+            result = wav2class(model, os.pwd() + '/' + file_name)
+
+            return result
+
+        app.run(host='0.0.0.0', port=5000)

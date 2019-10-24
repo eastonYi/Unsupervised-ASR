@@ -14,7 +14,7 @@ dirs:
         tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/test-clean_x
     type: scp
     vocab: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/subword_3724+1.vocab
-    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_convlstm/test2/checkpoint
+    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_resconv_gru/checkpoint
 
 data:
     featType: mfcc
@@ -22,20 +22,23 @@ data:
     right_context: 0
     downsample: 1
     add_delta: False
-    unit: word
+    unit: subword
 
 model:
     G:
         encoder:
-            type: conv_lstm
-            num_hidden: 1024
+            type: res_conv
+            num_hidden: 512
             num_filters: 64
         decoder:
-            type: fc
+            type: rnn
+            cell_type: blstm
+            num_hidden: 512
+            dropout: 0.2
 
 opti:
     type: adam
-    lr: 0.0003
+    lr: 0.0001
     decay_steps: 10000
 
 dev_step: 600
@@ -45,5 +48,5 @@ save_step: 600
 gpus: '0'
 batch_size: 40
 num_supervised:
-num_batch_tokens: 25000
+num_batch_tokens: 30000
 bucket_boundaries: 689,995,1165,1253,1309,1352,1387,1417,1444,1467,1488,1510,1530,1551,1572,1595,1641,1800

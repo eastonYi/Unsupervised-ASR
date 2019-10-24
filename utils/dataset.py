@@ -227,8 +227,8 @@ class ASR_align_ArkDataSet(ASRDataSet):
         super().__init__(align_file, args, _shuffle, transform)
         from .tools import ArkReader
         self.reader = ArkReader(scp_file)
+        self.list_uttids = list(self.reader.dict_scp.keys())
         self.dict_trans = self.load_trans(trans_file) if trans_file else None
-        self.list_uttids = list(self.dict_trans.keys())
         self.dict_aligns = self.load_aligns(align_file, feat_len_file) if align_file else None
 
         if _shuffle:
@@ -431,7 +431,7 @@ class ASR_classify_ArkDataSet(ASRDataSet):
 
     def __getitem__(self, id):
         uttid = self.list_uttids[id]
-        feat = self.reader.read_utt_data(id)
+        feat = self.reader.read_utt_data(uttid)
         # feat = down_sample(splice(feat, 2, 0), 3)
         y = self.dict_y[uttid]
 
