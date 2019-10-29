@@ -17,8 +17,8 @@ if args.model.G.encoder.type == 'res_conv':
 elif args.model.G.encoder.type == 'conv_lstm':
     from models.encoders import Conv_LSTM as Encoder
 
-if args.model.G.decoder.type == 'gru':
-    from models.decoders import GRU_FC as Decoder
+if args.model.G.decoder.type == 'rnn':
+    from models.decoders import RNN_FC as Decoder
 elif args.model.G.decoder.type == 'fc':
     from models.decoders import Fully_Connected as Decoder
 
@@ -103,7 +103,6 @@ def Train():
         _ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dirs.checkpoint_G, max_to_keep=1)
         ckpt_G.restore(_ckpt_manager.latest_checkpoint)
         print('checkpoint_G {} restored!!'.format(_ckpt_manager.latest_checkpoint))
-        step = int(_ckpt_manager.latest_checkpoint.split('-')[-1])
         # cer = evaluate(feature_dev, dataset_dev, args.data.dev_size, encoder, decoder)
         # with writer.as_default():
         #     tf.summary.scalar("performance/cer", cer, step=step)
@@ -273,7 +272,8 @@ def train_CTC_supervised(x, labels, encoder, decoder, optimizer):
 
 # @tf.function(experimental_relax_shapes=True)
 def train_G(x, encoder, decoder, D, optimizer, len_D):
-    vars_G = encoder.trainable_variables + decoder.trainable_variables
+    # vars_G = encoder.trainable_variables + decoder.trainable_variables
+    vars_G = decoder.trainable_variables
     with tf.GradientTape() as tape:
         encoded = encoder(x, training=True)
         logits = decoder(encoded, training=True)

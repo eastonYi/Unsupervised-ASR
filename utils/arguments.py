@@ -83,5 +83,6 @@ try:
     args.dim_input = TFData.read_tfdata_info(args.dirs.train.tfdata)['dim_feature']
     args.data.train_size = TFData.read_tfdata_info(args.dirs.train.tfdata)['size_dataset']
     args.data.dev_size = TFData.read_tfdata_info(args.dirs.dev.tfdata)['size_dataset']
+    args.dim_input *= (1 + args.data.left_context + args.data.right_context)
 except:
     print("have not converted to tfdata yet: ")

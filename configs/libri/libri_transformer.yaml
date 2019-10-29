@@ -1,7 +1,7 @@
 dirs:
     exp: libri
     train:
-        scp: /mnt/lustre/xushuang2/easton/data/libriSpeech/feats/feats.train-960.scp
+        scp: /mnt/lustre/xushuang2/easton/data/libriSpeech/feats/feats.train-100.scp
         trans: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/train-100.trans
         tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/train-100_x
     dev:
@@ -13,19 +13,23 @@ dirs:
         trans: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/test-clean.trans
         tfdata: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/tfdata/test-clean_x
     type: scp
-    vocab: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/subword_3724+1.vocab
-    checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_resconv_fc/hidden512/checkpoint/
+    vocab: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/subword_3726.vocab
+    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_resconv_fc/hidden512/checkpoint/
 
 data:
     featType: mfcc
-    left_context: 0
+    left_context: 2
     right_context: 0
-    downsample: 1
+    downsample: 3
     add_delta: False
     unit: word
 
 model:
     G:
+        d_model: 512
+        num_layers: 6
+        num_heads: 8
+        dropout_rate: 0.1
         encoder:
             type: res_conv
             num_hidden: 512
@@ -44,6 +48,7 @@ save_step: 600
 
 gpus: '0'
 batch_size: 40
+max_label_len: 100
 num_supervised:
-num_batch_tokens: 30000
-bucket_boundaries: 689,995,1165,1253,1309,1352,1387,1417,1444,1467,1488,1510,1530,1551,1572,1595,1641,1800
+num_batch_tokens: 9000
+bucket_boundaries: 229,331,388,417,436,450,462,472,481,489,496,503,510,517,524,531,547,817

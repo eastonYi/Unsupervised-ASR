@@ -41,6 +41,22 @@ class warmup_exponential_decay(tf.keras.optimizers.schedules.LearningRateSchedul
                         peak * 0.5 ** ((global_step - warmup_steps) / decay_steps))
 
 
+class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, d_model, warmup_steps=4000):
+        super().__init__()
+
+        self.d_model = d_model
+        self.d_model = tf.cast(self.d_model, tf.float32)
+
+        self.warmup_steps = warmup_steps
+
+    def __call__(self, step):
+        arg1 = tf.math.rsqrt(step)
+        arg2 = step * (self.warmup_steps ** -1.5)
+
+        return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+
+
 class TFData:
     """
     test on TF2.0
@@ -51,47 +67,8 @@ class TFData:
         self.dir_save = dir_save
         self.args = args
         self.size_file = size_file
-        self.dim_feature = dataset[0]['feature'].shape[-1] \
-            if dataset else self.read_tfdata_info(dir_save)['dim_feature']
-
-    # def save(self, name, length_file='feature_length.txt'):
-    #     num_token = 0
-    #     num_damaged_sample = 0
-    #     fw = open(self.dir_save/length_file, 'w')
-    #     def serialize_example(uttid, feature):
-    #         atts = {
-    #             'uttid': self._bytes_feature(bytes(uttid, 'UTF-8')),
-    #             'feature': self._bytes_feature(feature.tostring())
-    #         }
-    #         example_proto = tf.train.Example(features=tf.train.Features(feature=atts))
-    #
-    #         return example_proto.SerializeToString()
-    #
-    #     def generator():
-    #         nonlocal fw
-    #         for sample, _ in zip(self.dataset, tqdm(range(len(self.dataset)))):
-    #             line = sample['uttid'] + ' ' + str(len(sample['feature']))
-    #             fw.write(line + '\n')
-    #             yield serialize_example(sample['uttid'], sample['feature'])
-    #
-    #     dataset_tf = tf.data.Dataset.from_generator(
-    #         generator=generator,
-    #         output_types=tf.string,
-    #         output_shapes=())
-    #
-    #     record_file = self.dir_save/'{}.recode'.format(name)
-    #     mkdirs(record_file)
-    #     writer = tf.data.experimental.TFRecordWriter(str(record_file))
-    #     writer.write(dataset_tf)
-    #
-    #     with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
-    #         fw.write('data_file {}\n'.format(self.dataset.file))
-    #         fw.write('dim_feature {}\n'.format(self.dim_feature))
-    #         fw.write('num_tokens {}\n'.format(num_token))
-    #         fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
-    #         fw.write('damaged samples: {}\n'.format(num_damaged_sample))
-    #
-    #     return
+        self.dim_feature = self.read_tfdata_info(dir_save)['dim_feature']\
+            if self.read_tfdata_info(dir_save)['dim_feature'] else dataset[0]['feature'].shape[-1]
 
     def split_save(self, length_file='feature_length.txt', capacity=50000):
         num_token = 0
@@ -135,8 +112,7 @@ class TFData:
 
         return
 
-
-    def read(self, _shuffle=False):
+    def read(self, _shuffle=False, transform=False):
         """
         the tensor could run unlimitatly
         return a iter
@@ -160,6 +136,8 @@ class TFData:
             uttid = sample['uttid']
             feature = tf.reshape(tf.io.decode_raw(sample['feature'], tf.float32),
                                  [-1, self.dim_feature])[:self.max_feat_len, :]
+            if transform:
+                feature = process_raw_feature(feature, self.args)
 
             return uttid, feature
 
@@ -960,3 +938,18 @@ def list_pad(list_t):
         list_paded.append(tf.concat([t, [0]*(max_len-len(t))], 0))
 
     return tf.stack(list_paded)
+
+
+def process_raw_feature(features, args):
+
+    left_num = args.data.left_context
+    right_num = args.data.right_context
+    rate = args.data.downsample
+    shape = tf.shape(features)
+    splices = []
+    pp = tf.pad(features, [[left_num, right_num], [0, 0]])
+    for i in range(left_num + right_num + 1):
+        splices.append(tf.slice(pp, [i, 0], shape))
+    splices = tf.concat(axis=1, values=splices)
+
+    return splices[::rate]

@@ -19,7 +19,7 @@ dirs:
         data: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/text-960.txt
     type: scp
     vocab: /mnt/lustre/xushuang2/easton/data/libriSpeech/subword_data/subword_3724+1.vocab
-    checkpoint_G: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_resconv_fc/checkpoint
+    checkpoint_G: /mnt/lustre/xushuang2/easton/projects/EODM/exps/libri/libri_resconv_gru/checkpoint
 
 data:
     featType: mfcc
@@ -33,10 +33,13 @@ model:
     G:
         encoder:
             type: res_conv
-            num_hidden: 1024
+            num_hidden: 512
             num_filters: 64
         decoder:
-            type: fc
+            type: rnn
+            cell_type: blstm
+            num_hidden: 512
+            dropout: 0.2
     D:
         num_hidden: 512
         num_blocks: 5
@@ -54,7 +57,7 @@ save_step: 600
 lambda_gp: 10.0
 
 gpus: '0'
-batch_size: 10
+batch_size: 80
 text_batch_size: 100
 num_batch_tokens: 10000
 bucket_boundaries: 995,1253,1352,1417,1467,1510,1551,1595,1800

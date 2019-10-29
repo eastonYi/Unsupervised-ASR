@@ -54,6 +54,7 @@ class ASRDataSet(DataSet):
         return len(self.list_utterances)
 
 
+
 class ASR_align_DataSet(ASRDataSet):
     """
     for dataset with alignment, i.e. TIMIT
@@ -222,13 +223,15 @@ class ASR_align_ArkDataSet(ASRDataSet):
         - vocab.txt (used for model output)
             phone
         -
+        adjust_trans: 'add_sos', 'add_eos', 'add_sos_eos'
     """
-    def __init__(self, scp_file, trans_file, align_file, feat_len_file, args, _shuffle, transform):
+    def __init__(self, scp_file, trans_file, align_file, feat_len_file, args,
+                 _shuffle, transform, adjust_trans=None):
         super().__init__(align_file, args, _shuffle, transform)
         from .tools import ArkReader
         self.reader = ArkReader(scp_file)
         self.list_uttids = list(self.reader.dict_scp.keys())
-        self.dict_trans = self.load_trans(trans_file) if trans_file else None
+        self.dict_trans = self.load_trans(trans_file, adjust_trans) if trans_file else None
         self.dict_aligns = self.load_aligns(align_file, feat_len_file) if align_file else None
 
         if _shuffle:
@@ -278,9 +281,16 @@ class ASR_align_ArkDataSet(ASRDataSet):
                 if self.transform:
                     feat = process_raw_feature(feat, self.args)
                 res = feat
-            elif attr == 'trans':
+            elif 'trans' in attr:
+                '''
+                trans, trans_sos, trans_eos, trans_sos_eos
+                '''
                 try:
                     trans = self.dict_trans[uttid]
+                    if 'sos' in attr:
+                        trans = np.concatenate([[self.token2idx['<sos>']], trans], 0)
+                    if 'eos' in attr:
+                        trans = np.concatenate([trans, [self.token2idx['<eos>']]], 0)
                 except:
                     print('Not found {}'.format(uttid))
                     trans = np.array([4])
@@ -301,7 +311,7 @@ class ASR_align_ArkDataSet(ASRDataSet):
             list_res.append(res)
             list_len.append(len(res))
 
-        if attr in ('trans', 'align', 'stamps', 'bounds'):
+        if attr not in ('wav', 'feature'):
             max_len = max(list_len) if not max_len else max_len
             list_padded = []
             for res in list_res:
@@ -330,7 +340,7 @@ class ASR_align_ArkDataSet(ASRDataSet):
 
         return dict_aligns
 
-    def load_trans(self, trans_file):
+    def load_trans(self, trans_file, adjust_trans):
         # dict_trans = defaultdict(lambda: None)
         dict_trans = {}
         with open(trans_file) as f:
