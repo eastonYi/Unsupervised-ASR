@@ -98,7 +98,6 @@ def Train():
     ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dir_checkpoint, max_to_keep=20)
     step = 0
 
-    # if a checkpoint exists, restore the latest checkpoint.
     if args.dirs.checkpoint_G:
         _ckpt_manager = tf.train.CheckpointManager(ckpt_G, args.dirs.checkpoint_G, max_to_keep=1)
         ckpt_G.restore(_ckpt_manager.latest_checkpoint)

@@ -54,7 +54,6 @@ class ASRDataSet(DataSet):
         return len(self.list_utterances)
 
 
-
 class ASR_align_DataSet(ASRDataSet):
     """
     for dataset with alignment, i.e. TIMIT

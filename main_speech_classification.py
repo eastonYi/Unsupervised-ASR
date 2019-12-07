@@ -152,6 +152,7 @@ class AttrDict(dict):
             res = None
         return res
 
+
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(0)
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(levelname)s(%(filename)s:%(lineno)d): %(message)s')
@@ -186,20 +187,57 @@ except:
     print("have not converted to tfdata yet: ")
 
 
-def Classifier(args):
-    num_layers = 2
-    x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
-                                        name='generator_input_x')
+# def Classifier(args):
+#     num_layers = 4
+#     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+#                                         name='generator_input_x')
+#
+#     for _ in range(num_layers):
+#         x = tf.keras.layers.GRU(256,
+#                                 return_sequences=True,
+#                                 dropout=0.5)(x)
+#         x = tf.keras.layers.MaxPooling1D()(x)
+#
+#     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
+#     len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
+#     len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
+#
+#     ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
+#     logits_c = tf.gather_nd(logits, ids)
+#     logits_c = tf.reshape(logits_c, [-1, args.dim_output])
+#
+#     model = tf.keras.Model(inputs=input_x,
+#                            outputs=logits,
+#                            name='sequence_generator')
+#
+#     return model
 
-    for _ in range(num_layers):
-        x = tf.keras.layers.GRU(256,
+
+def Classifier(args):
+    num_hidden = 256
+
+    input_x = tf.keras.layers.Input(shape=[None, args.dim_input], name='encoder_input')
+    len_x = get_tensor_len(input_x)
+    x = tf.keras.layers.Dense(num_hidden, use_bias=False, activation='linear', name="encoder/fc_1")(input_x)
+
+    for i in range(3):
+        inputs = x
+        x = Conv1D(dim_output=num_hidden, kernel_size=5)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = Conv1D(dim_output=num_hidden, kernel_size=5)(x)
+        # x = tf.keras.layers.LayerNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = inputs + (0.3*x)
+        x = tf.keras.layers.MaxPool1D(pool_size=2, padding='SAME')(x)
+        len_x = tf.cast(tf.math.ceil(tf.cast(len_x, tf.float32)/2), tf.int32)
+
+    for _ in range(2):
+        x = tf.keras.layers.GRU(128,
                                 return_sequences=True,
                                 dropout=0.5)(x)
-        x = tf.keras.layers.MaxPooling1D()(x)
 
     logits = tf.keras.layers.Dense(args.dim_output, activation='linear')(x)
-    len_x = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
-    len_x = tf.cast(len_x/tf.pow(2, num_layers), tf.int32)
 
     ids = tf.stack([tf.range(tf.shape(x)[0]), len_x-1], 1)
     logits_c = tf.gather_nd(logits, ids)
@@ -242,10 +280,10 @@ def Train():
         # wav data
         # TFData(dataset=dataset_train,
         #        dir_save=args.dirs.train.tfdata,
-        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=500)
+        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=50000)
         # TFData(dataset=dataset_dev,
         #        dir_save=args.dirs.dev.tfdata,
-        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=500)
+        #        args=args, max_feat_len=args.max_seq_len).split_save(capacity=10000)
         # import pdb; pdb.set_trace()
 
         feature_train = TFData(dataset=dataset_train,
@@ -254,8 +292,8 @@ def Train():
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
                         args=args, max_feat_len=args.max_seq_len).read()
-        iter_feature_train = iter(feature_train.cache().repeat().shuffle(5).padded_batch(args.batch_size,
-                ([None, args.dim_input], [1])).prefetch(buffer_size=2))
+        iter_feature_train = iter(feature_train.cache().repeat().shuffle(500).padded_batch(args.batch_size,
+                ([None, args.dim_input], [1])).prefetch(buffer_size=20))
         feature_train = feature_train.padded_batch(1, ([None, args.dim_input], [1]))
         feature_dev = feature_dev.padded_batch(1, ([None, args.dim_input], [1]))
 
@@ -283,11 +321,11 @@ def Train():
         processed += len(x)
         loss = train_G_supervised(x, y, model, optimizer_G, args.dim_output)
         batch_time = time()-start
-        if step % 10 == 0:
+        if step % 100 == 0:
             print('loss: {:.3f}\tbatch: {}\tused: {:.3f}\t {:.2f}% step: {}'.format(
                    loss, x.shape, batch_time, processed/args.data.train_size , step))
         if step % args.dev_step == 1:
-            p_train = evaluate(feature_train, dataset_train, args.data.train_size, model)
+            p_train = evaluate(feature_train, dataset_train, 2000, model)
             p_dev = evaluate(feature_dev, dataset_dev, args.data.dev_size, model)
             print('eval performance: train: {:.2f}% dev: {:.2f}%'.format(p_train*100, p_dev*100))
         if step % args.save_step == 0:
@@ -302,7 +340,7 @@ def Train():
 def evaluate(feature_dev, dataset_dev, dev_size, model):
     list_p = []
     list_res = []
-    for x, y in tqdm(feature_dev):
+    for i, (x, y) in tqdm(zip(range(dev_size), feature_dev)):
         y = y[0]
         logits = model(x)
         _y = tf.argmax(tf.math.bincount(tf.argmax(logits, -1, output_type=tf.int32)),
@@ -328,7 +366,7 @@ def train_G_supervised(x, y, model, optimizer_G, dim_output):
     return gen_loss
 
 
-def CE_loss(logits, labels, vocab_size, confidence=0.9):
+def CE_loss(logits, labels, vocab_size, confidence=0.99):
 
     low_confidence = (1.0 - confidence) / tf.cast(vocab_size-1, tf.float32)
     normalizing = -(confidence*tf.math.log(confidence) +
@@ -415,7 +453,6 @@ def wav2class(model, wav_file='ex.wav'):
                    output_type=tf.int64).numpy()
 
     return _y
-
 
 
 if __name__ == '__main__':

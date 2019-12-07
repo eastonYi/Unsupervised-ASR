@@ -5,15 +5,15 @@
   "uploadOnSave": true,
   "useAtomicWrites": true,
   "deleteLocal": true,
-  "hostname": "172.18.36.31",
+  "hostname": "172.18.30.114",
   "port": "22",
-  "target": "/mnt/lustre/xushuang2/easton/projects/EODM",
+  "target": "/home/user/easton/projects/EODM",
   "ignore": [
     ".remote-sync.json",
     ".git/**"
   ],
-  "username": "xushuang2",
-  "password": "xushuang2speech",
+  "username": "user",
+  "password": "      ",
   "watch": [],
   "transport": "scp"
 }

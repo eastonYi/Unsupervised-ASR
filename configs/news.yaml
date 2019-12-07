@@ -1,0 +1,32 @@
+dirs:
+    exp: news
+    train:
+        scp: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/train/cmvn_lef3_sub3.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/train/text
+        tfdata: /mnt/lustre/xushuang2/easton/data/news/tfdata/train
+    dev:
+        scp: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/test/cmvn_lef3_sub3.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/test/text
+        tfdata: /mnt/lustre/xushuang2/easton/data/news/tfdata/test
+    test:
+        scp: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/test/cmvn_lef3_sub3.scp
+        label: /mnt/lustre/xushuang2/zyfan/data/synthesis_topic_news/cmvn_lef3_sub3/test/text
+    # checkpoint: /mnt/lustre/xushuang2/easton/projects/EODM/exps/news/news/dropout0.3/checkpoint
+
+data:
+    unit: phone
+
+opti:
+    type: adam
+    lr: 0.0002
+
+dev_step: 6000
+decode_step: 1000
+save_step: 6000
+
+gpus: '0'
+batch_size: 350
+
+max_seq_len: 10000
+num_batch_tokens: 1000
+bucket_boundaries: 81,93,105,118,138,178,260

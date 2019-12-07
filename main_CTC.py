@@ -3,6 +3,7 @@
 from datetime import datetime
 from time import time
 import os
+import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL']='3'
 import tensorflow as tf
 import numpy as np
@@ -10,14 +11,13 @@ from tqdm import tqdm
 
 from utils.tools import TFData
 from utils.arguments import args
-from utils.dataset import ASR_align_ArkDataSet
+from utils.dataset import ASR_align_ArkDataSet, ASR_align_DataSet
 from utils.tools import batch_cer
 
-# from models.GAN import PhoneClassifier
+from models.GAN import PhoneClassifier as Model
 # from models.encoders.encoders import conv_lstm as Model
 # from models.encoders.conv_gru import Conv_GRU as Model
-from models.encoders.fullyConv import FullyConv as Model
-# from models.DeepSpeech2 import DeepSpeech2 as Model
+# from models.encoders.fullyConv import FullyConv as Model
 
 ITERS = 200000 # How many iterations to train for
 tf.random.set_seed(args.seed)
@@ -25,22 +25,38 @@ tf.random.set_seed(args.seed)
 
 def Train():
     with tf.device("/cpu:0"):
-        dataset_train = ASR_align_ArkDataSet(
-            scp_file=args.dirs.train.scp,
+        # dataset_train = ASR_align_ArkDataSet(
+        #     scp_file=args.dirs.train.scp,
+        #     trans_file=args.dirs.train.trans,
+        #     align_file=None,
+        #     feat_len_file=None,
+        #     args=args,
+        #     _shuffle=False,
+        #     transform=False)
+        # dataset_dev = ASR_align_ArkDataSet(
+        #     scp_file=args.dirs.dev.scp,
+        #     trans_file=args.dirs.dev.trans,
+        #     align_file=None,
+        #     feat_len_file=None,
+        #     args=args,
+        #     _shuffle=False,
+        #     transform=False)
+        dataset_train = ASR_align_DataSet(
             trans_file=args.dirs.train.trans,
-            align_file=None,
-            feat_len_file=None,
+            align_file=args.dirs.train.align,
+            uttid2wav=args.dirs.train.wav_scp,
+            feat_len_file=args.dirs.train.feat_len,
             args=args,
             _shuffle=False,
-            transform=False)
-        dataset_dev = ASR_align_ArkDataSet(
-            scp_file=args.dirs.dev.scp,
+            transform=True)
+        dataset_dev = ASR_align_DataSet(
             trans_file=args.dirs.dev.trans,
-            align_file=None,
-            feat_len_file=None,
+            uttid2wav=args.dirs.dev.wav_scp,
+            align_file=args.dirs.dev.align,
+            feat_len_file=args.dirs.dev.feat_len,
             args=args,
             _shuffle=False,
-            transform=False)
+            transform=True)
         # wav data
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
@@ -62,12 +78,12 @@ def Train():
     # create model paremeters
     model = Model(args)
     model.summary()
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        args.opti.lr,
-        decay_steps=args.opti.decay_steps,
-        decay_rate=0.5,
-        staircase=True)
-    optimizer = tf.keras.optimizers.Adam(lr_schedule, beta_1=0.9, beta_2=0.98)
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #     args.opti.lr,
+    #     decay_steps=args.opti.decay_steps,
+    #     decay_rate=0.5,
+    #     staircase=True)
+    optimizer = tf.keras.optimizers.Adam(args.opti.lr, beta_1=0.5, beta_2=0.9)
 
     writer = tf.summary.create_file_writer(str(args.dir_log))
     ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer)
@@ -191,7 +207,7 @@ def monitor(sample, model):
     preds = ctc_decode(logits, len_logits)
 
     print('predicts: \n', preds.numpy()[0])
-    print('align: \n', sample['align'])
+    # print('align: \n', sample['align'])
     print('trans: \n', sample['trans'])
 
 
@@ -213,7 +229,8 @@ def evaluate(feature, dataset, dev_size, model):
         total_res_len += batch_res_len
 
         num_processed += len(x)
-        print('infering {} / {} ...'.format(num_processed, dev_size))
+        sys.stdout.write('\rinfering {} / {} ...'.format(num_processed, dev_size))
+        sys.stdout.flush()
 
     cer = total_cer_dist/total_cer_len
     print('dev PER: {:.3f}\t{} / {}'.format(cer, num_processed, dev_size))
@@ -229,7 +246,6 @@ def train_CTC_supervised(x, labels, model, optimizer):
         len_labels = tf.reduce_sum(tf.cast(labels > 0, tf.int32), -1)
         loss = ctc_loss(logits, len_logits, labels, len_labels)
         loss = tf.reduce_mean(loss)
-
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
