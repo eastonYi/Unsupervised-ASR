@@ -58,9 +58,8 @@ def P_Ngram(kernel, args):
     return:
         p: [batch, max_label_len]
     """
-    input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
+    input_x = tf.keras.layers.Input(shape=[None, args.dim_output],
                                     name='input_x')
-
     x_log = tf.math.log(input_x+1e-15)
     x_conv = tf.keras.layers.Conv1D(filters=args.data.top_k,
                                     kernel_size=(args.data.ngram,),

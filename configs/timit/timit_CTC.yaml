@@ -4,52 +4,54 @@ dirs:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/train.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/train.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train_wav.scp
-        # tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats_13_2_3_3
-    train_supervise:
-        trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
-        align: /home/user/easton/data/TIMIT/kaldi_gen/train_200.phone.frame
-        wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
-        tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats_13_2_3_3
+        tfdata: /home/user/easton/data/TIMIT/tfdata/train_feats
+    # train:
+    #     trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
+    #     align: /home/user/easton/data/TIMIT/kaldi_gen/train_200.phone.frame
+    #     wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
+    #     tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats
     dev:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/test.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/test_wav.scp
-        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats_13_2_3_3
+        tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats
     test:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
     type: csv
     vocab: /home/user/easton/data/TIMIT/phone39+1.vocab
-    # checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_CTC/CTC/checkpoint
+    # checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_CTC/checkpoint
 
 data:
     featType: mfcc
     dim_raw_input: 13
     left_context: 0
-    right_context: 2
-    downsample: 3
-    add_delta: True
+    right_context: 0
+    downsample: 1
+    add_delta: False
     unit: phone
 
 model:
     G:
-        structure: gru
-        num_hidden: 256
+        # structure: gru
+        # num_hidden: 256
+        # num_layers: 2
+        # dropout: 0.1
+        structure: conv
+        num_hidden: 128
         num_layers: 2
-        dropout: 0.1
 
 opti:
     type: adam
     lr: 0.0004
     decay_steps: 0.5
 
-dev_step: 100
+dev_step: 20
 decode_step: 100
 save_step: 100
 
 gpus: '0'
-batch_size: 80
-num_supervised: 200
+batch_size: 40
+num_supervised: 100
 
 num_batch_tokens: 10000
 bucket_boundaries: 81,93,105,118,138,178,260

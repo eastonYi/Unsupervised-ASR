@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
     print('CUDA_VISIBLE_DEVICES: ', args.gpus)
     os.environ["CUDA_VISIBLE_DEVICES"] = param.gpu
-    gpus = tf.config.experimental.list_physical_devices('GPU')
+    gpus = tf.config.list_physical_devices('GPU')
     assert len(gpus) > 0, "Not enough GPU hardware devices available"
     [tf.config.experimental.set_memory_growth(gpu, True) for gpu in gpus]
 

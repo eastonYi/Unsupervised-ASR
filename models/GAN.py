@@ -1,6 +1,6 @@
 import tensorflow as tf
 # import tensorflow_addons as tfa
-from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input, MaxPooling2D
+from tensorflow.keras.layers import Dense, Bidirectional, LSTM, GRU, Embedding, Reshape, Conv2D, Input, MaxPooling2D,MaxPool1D
 
 
 def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
@@ -17,9 +17,32 @@ def Conv1D(dim_output, kernel_size, strides=1, padding='same'):
 def PhoneClassifier(args):
     x = input_x = tf.keras.layers.Input(shape=[None, args.dim_input],
                                         name='generator_input_x')
+    len_feats = None
     if args.model.G.structure == 'fc':
+        x = x[:,::4,:]
+        len_feats = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(x), -1) > 0, tf.int32), -1)
         for _ in range(args.model.G.num_layers):
             x = Dense(args.model.G.num_hidden, activation='relu')(x)
+    elif args.model.G.structure == 'conv':
+        len_feats = tf.reduce_sum(tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.int32), -1)
+        x = Dense(args.model.G.num_hidden)(x)
+        for i in range(args.model.G.num_layers):
+            inputs = x
+            x = Conv1D(dim_output=args.model.G.num_hidden, kernel_size=5)(x)
+            # x = tf.keras.layers.LayerNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+            x = Conv1D(dim_output=args.model.G.num_hidden, kernel_size=5)(x)
+            # x = tf.keras.layers.LayerNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+
+            x = inputs + (0.3*x)
+
+            x = MaxPool1D(strides=2, padding='same')(x)
+            len_feats = tf.cast(tf.math.ceil(tf.cast(len_feats, tf.float32)/2), tf.int32)
+
+        for i in range(1):
+            x = Dense(args.model.G.num_hidden, activation='relu')(x)
+
     elif args.model.G.structure == 'lstm':
         for _ in range(args.model.G.num_layers):
             x = LSTM(args.model.G.num_hidden,
@@ -67,9 +90,11 @@ def PhoneClassifier(args):
             rate=args.model.G.dropout)(x, mask=mask)
 
     logits = Dense(args.dim_output, activation='linear')(x)
-    mask = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
+    if len_feats is not None:
+        mask = tf.sequence_mask(len_feats, dtype=tf.float32)
+    else:
+        mask = tf.cast(tf.reduce_sum(tf.abs(input_x), -1) > 0, tf.float32)
     logits *= mask[:, :, None]
-
     model = tf.keras.Model(inputs=input_x,
                            outputs=logits,
                            name='sequence_generator')
@@ -207,8 +232,7 @@ def PhoneDiscriminator3(args):
         x = tf.keras.layers.ReLU()(x)
 
         x = inputs + 1.0*x
-        x = tf.keras.layers.MaxPooling1D(padding='same')(x)
-
+        # x = tf.keras.layers.MaxPooling1D(padding='same')(x)
     _, time, hidden = x.shape
     x = tf.reshape(x, [-1, time*hidden])
     output = Dense(1, activation='linear')(x)

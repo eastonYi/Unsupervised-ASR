@@ -1,0 +1,175 @@
+Model: "sequence_generator"
+__________________________________________________________________________________________________
+Layer (type)                    Output Shape         Param #     Connected to
+==================================================================================================
+generator_input_x (InputLayer)  [(None, None, 195)]  0
+__________________________________________________________________________________________________
+tf_op_layer_Abs (TensorFlowOpLa [(None, None, 195)]  0           generator_input_x[0][0]
+__________________________________________________________________________________________________
+tf_op_layer_Sum (TensorFlowOpLa [(None, None)]       0           tf_op_layer_Abs[0][0]
+__________________________________________________________________________________________________
+tf_op_layer_Greater (TensorFlow [(None, None)]       0           tf_op_layer_Sum[0][0]
+__________________________________________________________________________________________________
+dense (Dense)                   (None, None, 512)    100352      generator_input_x[0][0]
+__________________________________________________________________________________________________
+tf_op_layer_Cast (TensorFlowOpL [(None, None)]       0           tf_op_layer_Greater[0][0]
+__________________________________________________________________________________________________
+dense_1 (Dense)                 (None, None, 40)     20520       dense[0][0]
+__________________________________________________________________________________________________
+tf_op_layer_strided_slice (Tens [(None, None, 1)]    0           tf_op_layer_Cast[0][0]
+__________________________________________________________________________________________________
+tf_op_layer_Mul (TensorFlowOpLa [(None, None, 40)]   0           dense_1[0][0]
+                                                                 tf_op_layer_strided_slice[0][0]
+==================================================================================================
+Total params: 120,872
+Trainable params: 120,872
+Non-trainable params: 0
+__________________________________________________________________________________________________
+Model: "P_ngram"
+_________________________________________________________________
+Layer (type)                 Output Shape              Param #
+=================================================================
+input_x (InputLayer)         [(None, None, 40)]        0
+_________________________________________________________________
+tf_op_layer_AddV2 (TensorFlo [(None, None, 40)]        0
+_________________________________________________________________
+tf_op_layer_Log (TensorFlowO [(None, None, 40)]        0
+_________________________________________________________________
+conv1d (Conv1D)              (None, None, 1000)        200000
+_________________________________________________________________
+tf_op_layer_Exp (TensorFlowO [(None, None, 1000)]      0
+=================================================================
+Total params: 200,000
+Trainable params: 0
+Non-trainable params: 200,000
+_________________________________________________________________
+not found checkpoint
+not found checkpoint
+2020-10-19 09:21:41.632756: I tensorflow/stream_executor/platform/default/dso_loader.cc:48] Successfully opened dynamic library libcublas.so.10
+2020-10-19 09:21:43.228597: I tensorflow/stream_executor/platform/default/dso_loader.cc:48] Successfully opened dynamic library libcudnn.so.7
+EODM loss: 18.57	loss_fs: 1.157 * 2e-05	loss_supervise: 3.070 * 3.0	batch: (1000, 208, 195) time: 9.24 s 21.645% step: 0
+with ground stamps: True dev FER: 0.973	 dev PER: 0.899	 over_fire_rate: 0.87	1680 / 1680
+predicts:
+ [34 20 20 20 20 14  5 36 19 29  2 13 14 29 29 29 29  3 36 34 20 26 14  5
+  3  3  5  5  5  5  5 14  3 36 38 29 29  2 13 13 38 14  3 36 15 17 13 13
+  2  2 13  5 39 39  3 14 29 29 36 34 20 20 20 20 20 14 29 39  2 36 36 20
+ 32 14  2 34 20 13 13 14  5  5  5  5  5  3 36 34 20 38 11 34 34 34 20 20]
+align:
+ [ 1  1  1  1 18 18 18 24 24 15 15 15 15  3  3  3  3  3  3  1  1 32 32 13
+ 13 13 13 17 17 26 26 22 22 22  1  9 19 19 15 15 15 15 12 24 24 24 30 30
+ 18 36 36 38 38 35 35 24 24 18 18  1  1  1  1  1  9  9 18 11 11  4  1  1
+ 16 16 34 34  1 20 20 20 20  2  2  2  2  2  2  1  1  1  1  1  1  1  1  1]
+trans:
+ [ 1 18 24 15  3  1 32 13 17 26 22  1  9 19 15 12 24 30 18 36 38 35 24 18
+  1  9 18 11  4  1 16 34  1 20  2  1]
+save model /data/sxu/easton/projects/EODM/exps/timit/timit_EODM/checkpoint/ckpt-0
+EODM loss: 15.94	loss_fs: 4.490 * 2e-05	loss_supervise: 2.621 * 3.0	batch: (1000, 222, 195) time: 1.85 s 238.095% step: 10
+EODM loss: 15.37	loss_fs: 11.338 * 2e-05	loss_supervise: 2.351 * 3.0	batch: (1000, 242, 195) time: 1.29 s 454.545% step: 20
+EODM loss: 14.82	loss_fs: 27.955 * 2e-05	loss_supervise: 2.186 * 3.0	batch: (1000, 224, 195) time: 1.31 s 670.996% step: 30
+EODM loss: 14.33	loss_fs: 48.645 * 2e-05	loss_supervise: 2.115 * 3.0	batch: (1000, 229, 195) time: 1.44 s 887.446% step: 40
+EODM loss: 13.92	loss_fs: 73.599 * 2e-05	loss_supervise: 2.088 * 3.0	batch: (1000, 213, 195) time: 1.32 s 1103.896% step: 50
+EODM loss: 13.66	loss_fs: 90.974 * 2e-05	loss_supervise: 2.077 * 3.0	batch: (1000, 260, 195) time: 1.54 s 1320.346% step: 60
+EODM loss: 13.40	loss_fs: 104.803 * 2e-05	loss_supervise: 2.070 * 3.0	batch: (1000, 222, 195) time: 1.27 s 1536.797% step: 70
+EODM loss: 13.25	loss_fs: 117.494 * 2e-05	loss_supervise: 2.065 * 3.0	batch: (1000, 242, 195) time: 1.28 s 1753.247% step: 80
+EODM loss: 13.15	loss_fs: 129.180 * 2e-05	loss_supervise: 2.054 * 3.0	batch: (1000, 242, 195) time: 1.22 s 1969.697% step: 90
+EODM loss: 13.01	loss_fs: 130.717 * 2e-05	loss_supervise: 2.041 * 3.0	batch: (1000, 224, 195) time: 1.14 s 2186.147% step: 100
+EODM loss: 12.89	loss_fs: 137.642 * 2e-05	loss_supervise: 2.035 * 3.0	batch: (1000, 229, 195) time: 1.31 s 2402.597% step: 110
+EODM loss: 12.83	loss_fs: 140.300 * 2e-05	loss_supervise: 2.030 * 3.0	batch: (1000, 260, 195) time: 1.67 s 2619.048% step: 120
+EODM loss: 12.70	loss_fs: 153.246 * 2e-05	loss_supervise: 2.022 * 3.0	batch: (1000, 260, 195) time: 1.28 s 2835.498% step: 130
+	EODM loss: 12.65	loss_fs: 152.661 * 2e-05	loss_supervise: 2.012 * 3.0	batch: (1000, 242, 195) time: 1.39 s 3051.948% step: 140
+EODM loss: 12.68	loss_fs: 161.568 * 2e-05	loss_supervise: 2.007 * 3.0	batch: (1000, 231, 195) time: 1.22 s 3268.398% step: 150
+EODM loss: 12.57	loss_fs: 150.837 * 2e-05	loss_supervise: 1.997 * 3.0	batch: (1000, 229, 195) time: 1.25 s 3484.848% step: 160
+EODM loss: 12.53	loss_fs: 159.958 * 2e-05	loss_supervise: 1.991 * 3.0	batch: (1000, 220, 195) time: 1.21 s 3701.299% step: 170
+EODM loss: 12.43	loss_fs: 158.633 * 2e-05	loss_supervise: 1.980 * 3.0	batch: (1000, 260, 195) time: 1.44 s 3917.749% step: 180
+EODM loss: 12.39	loss_fs: 162.728 * 2e-05	loss_supervise: 1.974 * 3.0	batch: (1000, 260, 195) time: 1.35 s 4134.199% step: 190
+EODM loss: 12.22	loss_fs: 166.460 * 2e-05	loss_supervise: 1.971 * 3.0	batch: (1000, 260, 195) time: 1.35 s 4350.649% step: 200
+with ground stamps: True dev FER: 0.613	 dev PER: 0.614	 over_fire_rate: 0.89	1680 / 1680
+predicts:
+ [ 1  1  1  1 21 21 24  1  1  1  1  1 18  1  1  1  1  1  1  1  1 21 21  1
+  1  1  1  1 24  1  1  1 13  1  1 37  1  1  1  1 21 30  1  1  1 21  1 21
+  1  1 21  3  3  1  1  1  1  1  1  1  1  1  1  1 21 21 37  1 37  1  1  1
+ 21 21  1  1  1  1 21 14  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1]
+align:
+ [ 1  1  1  1 18 18 18 24 24 15 15 15 15  3  3  3  3  3  3  1  1 32 32 13
+ 13 13 13 17 17 26 26 22 22 22  1  9 19 19 15 15 15 15 12 24 24 24 30 30
+ 18 36 36 38 38 35 35 24 24 18 18  1  1  1  1  1  9  9 18 11 11  4  1  1
+ 16 16 34 34  1 20 20 20 20  2  2  2  2  2  2  1  1  1  1  1  1  1  1  1]
+trans:
+ [ 1 18 24 15  3  1 32 13 17 26 22  1  9 19 15 12 24 30 18 36 38 35 24 18
+  1  9 18 11  4  1 16 34  1 20  2  1]
+save model /data/sxu/easton/projects/EODM/exps/timit/timit_EODM/checkpoint/ckpt-200
+EODM loss: 12.41	loss_fs: 166.246 * 2e-05	loss_supervise: 1.959 * 3.0	batch: (1000, 231, 195) time: 1.18 s 4567.100% step: 210
+EODM loss: 12.24	loss_fs: 167.441 * 2e-05	loss_supervise: 1.949 * 3.0	batch: (1000, 229, 195) time: 1.17 s 4783.550% step: 220
+EODM loss: 12.22	loss_fs: 168.653 * 2e-05	loss_supervise: 1.939 * 3.0	batch: (1000, 220, 195) time: 1.26 s 5000.000% step: 230
+EODM loss: 12.25	loss_fs: 168.851 * 2e-05	loss_supervise: 1.933 * 3.0	batch: (1000, 208, 195) time: 1.05 s 5216.450% step: 240
+EODM loss: 12.18	loss_fs: 169.357 * 2e-05	loss_supervise: 1.927 * 3.0	batch: (1000, 260, 195) time: 1.42 s 5432.900% step: 250
+	EODM loss: 12.07	loss_fs: 173.381 * 2e-05	loss_supervise: 1.922 * 3.0	batch: (1000, 260, 195) time: 1.46 s 5649.351% step: 260
+EODM loss: 12.18	loss_fs: 180.468 * 2e-05	loss_supervise: 1.909 * 3.0	batch: (1000, 260, 195) time: 1.45 s 5865.801% step: 270
+EODM loss: 12.08	loss_fs: 166.056 * 2e-05	loss_supervise: 1.904 * 3.0	batch: (1000, 229, 195) time: 1.27 s 6082.251% step: 280
+EODM loss: 12.00	loss_fs: 177.027 * 2e-05	loss_supervise: 1.895 * 3.0	batch: (1000, 220, 195) time: 1.24 s 6298.701% step: 290
+EODM loss: 12.05	loss_fs: 174.856 * 2e-05	loss_supervise: 1.886 * 3.0	batch: (1000, 220, 195) time: 1.16 s 6515.152% step: 300
+EODM loss: 12.06	loss_fs: 180.903 * 2e-05	loss_supervise: 1.883 * 3.0	batch: (1000, 260, 195) time: 1.39 s 6731.602% step: 310
+EODM loss: 11.94	loss_fs: 177.678 * 2e-05	loss_supervise: 1.876 * 3.0	batch: (1000, 213, 195) time: 1.13 s 6948.052% step: 320
+EODM loss: 11.95	loss_fs: 178.996 * 2e-05	loss_supervise: 1.869 * 3.0	batch: (1000, 242, 195) time: 1.36 s 7164.502% step: 330
+EODM loss: 12.00	loss_fs: 176.267 * 2e-05	loss_supervise: 1.858 * 3.0	batch: (1000, 231, 195) time: 1.28 s 7380.952% step: 340
+EODM loss: 11.98	loss_fs: 182.268 * 2e-05	loss_supervise: 1.850 * 3.0	batch: (1000, 220, 195) time: 1.24 s 7597.403% step: 350
+EODM loss: 11.97	loss_fs: 178.573 * 2e-05	loss_supervise: 1.847 * 3.0	batch: (1000, 196, 195) time: 1.05 s 7813.853% step: 360
+EODM loss: 11.87	loss_fs: 177.516 * 2e-05	loss_supervise: 1.841 * 3.0	batch: (1000, 260, 195) time: 1.57 s 8030.303% step: 370
+EODM loss: 11.80	loss_fs: 188.821 * 2e-05	loss_supervise: 1.834 * 3.0	batch: (1000, 202, 195) time: 1.07 s 8246.753% step: 380
+EODM loss: 11.83	loss_fs: 189.540 * 2e-05	loss_supervise: 1.830 * 3.0	batch: (1000, 242, 195) time: 1.25 s 8463.203% step: 390
+EODM loss: 11.80	loss_fs: 184.889 * 2e-05	loss_supervise: 1.822 * 3.0	batch: (1000, 231, 195) time: 1.66 s 8679.654% step: 400
+with ground stamps: True dev FER: 0.596	 dev PER: 0.600	 over_fire_rate: 0.89	1680 / 1680
+predicts:
+ [ 1  1  1  1 21 21 24  1  1  1  1  1 21  1  1  1  1  1  1  1  1 21 12 23
+ 23  1  1  1 13  1  1  1 13  1  1 37 29  1  1  1 21 12  1  1  1  1  1 21
+ 29  1 21 37  1  1  1  1  1  1  1  1  1  1  1  1 21 21 37  1 37  1  1  1
+  1 21 24  1  1  1 21 12  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1]
+align:
+ [ 1  1  1  1 18 18 18 24 24 15 15 15 15  3  3  3  3  3  3  1  1 32 32 13
+ 13 13 13 17 17 26 26 22 22 22  1  9 19 19 15 15 15 15 12 24 24 24 30 30
+ 18 36 36 38 38 35 35 24 24 18 18  1  1  1  1  1  9  9 18 11 11  4  1  1
+ 16 16 34 34  1 20 20 20 20  2  2  2  2  2  2  1  1  1  1  1  1  1  1  1]
+trans:
+ [ 1 18 24 15  3  1 32 13 17 26 22  1  9 19 15 12 24 30 18 36 38 35 24 18
+  1  9 18 11  4  1 16 34  1 20  2  1]
+save model /data/sxu/easton/projects/EODM/exps/timit/timit_EODM/checkpoint/ckpt-400
+EODM loss: 11.75	loss_fs: 187.750 * 2e-05	loss_supervise: 1.815 * 3.0	batch: (1000, 220, 195) time: 1.35 s 8896.104% step: 410
+EODM loss: 11.88	loss_fs: 183.552 * 2e-05	loss_supervise: 1.813 * 3.0	batch: (1000, 220, 195) time: 1.27 s 9112.554% step: 420
+EODM loss: 11.79	loss_fs: 180.875 * 2e-05	loss_supervise: 1.807 * 3.0	batch: (1000, 260, 195) time: 1.37 s 9329.004% step: 430
+EODM loss: 11.66	loss_fs: 190.109 * 2e-05	loss_supervise: 1.802 * 3.0	batch: (1000, 205, 195) time: 1.17 s 9545.455% step: 440
+EODM loss: 11.74	loss_fs: 189.101 * 2e-05	loss_supervise: 1.794 * 3.0	batch: (1000, 242, 195) time: 1.26 s 9761.905% step: 450
+EODM loss: 11.81	loss_fs: 192.844 * 2e-05	loss_supervise: 1.789 * 3.0	batch: (1000, 260, 195) time: 1.56 s 9978.355% step: 460
+EODM loss: 11.72	loss_fs: 195.144 * 2e-05	loss_supervise: 1.781 * 3.0	batch: (1000, 220, 195) time: 1.14 s 10194.805% step: 470
+EODM loss: 11.77	loss_fs: 185.470 * 2e-05	loss_supervise: 1.780 * 3.0	batch: (1000, 220, 195) time: 1.22 s 10411.255% step: 480
+EODM loss: 11.69	loss_fs: 191.348 * 2e-05	loss_supervise: 1.774 * 3.0	batch: (1000, 260, 195) time: 1.35 s 10627.706% step: 490
+EODM loss: 11.59	loss_fs: 194.651 * 2e-05	loss_supervise: 1.769 * 3.0	batch: (1000, 186, 195) time: 1.26 s 10844.156% step: 500
+EODM loss: 11.61	loss_fs: 193.743 * 2e-05	loss_supervise: 1.761 * 3.0	batch: (1000, 242, 195) time: 1.32 s 11060.606% step: 510
+EODM loss: 11.64	loss_fs: 187.626 * 2e-05	loss_supervise: 1.756 * 3.0	batch: (1000, 242, 195) time: 1.32 s 11277.056% step: 520
+EODM loss: 11.63	loss_fs: 197.263 * 2e-05	loss_supervise: 1.754 * 3.0	batch: (1000, 229, 195) time: 1.15 s 11493.506% step: 530
+EODM loss: 11.66	loss_fs: 194.833 * 2e-05	loss_supervise: 1.751 * 3.0	batch: (1000, 220, 195) time: 1.29 s 11709.957% step: 540
+EODM loss: 11.72	loss_fs: 191.924 * 2e-05	loss_supervise: 1.749 * 3.0	batch: (1000, 260, 195) time: 1.36 s 11926.407% step: 550
+EODM loss: 11.51	loss_fs: 196.390 * 2e-05	loss_supervise: 1.744 * 3.0	batch: (1000, 202, 195) time: 1.10 s 12142.857% step: 560
+EODM loss: 11.50	loss_fs: 195.981 * 2e-05	loss_supervise: 1.735 * 3.0	batch: (1000, 260, 195) time: 1.56 s 12359.307% step: 570
+EODM loss: 11.62	loss_fs: 200.297 * 2e-05	loss_supervise: 1.732 * 3.0	batch: (1000, 231, 195) time: 1.29 s 12575.758% step: 580
+EODM loss: 11.53	loss_fs: 202.216 * 2e-05	loss_supervise: 1.729 * 3.0	batch: (1000, 231, 195) time: 1.25 s 12792.208% step: 590
+EODM loss: 11.55	loss_fs: 195.487 * 2e-05	loss_supervise: 1.727 * 3.0	batch: (1000, 224, 195) time: 1.19 s 13008.658% step: 600
+with ground stamps: True dev FER: 0.586	 dev PER: 0.593	 over_fire_rate: 0.89	1680 / 1680
+predicts:
+ [ 1  1  1  1 21 21 17  1  1  1  1  1 21  1  1  1  1  1  1  1  1 21 21 29
+  1  1  1  1 13  1  1  1 13  1  1 37 29  1  1  1 21 12  1  1  1  1  1 21
+ 29  1 21 37  1  1  1  1  1  1  1  1  1  1  1  1 21 16 29  1 37  1  1  1
+  1  7 24  1  1  1 21 12  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1]
+align:
+ [ 1  1  1  1 18 18 18 24 24 15 15 15 15  3  3  3  3  3  3  1  1 32 32 13
+ 13 13 13 17 17 26 26 22 22 22  1  9 19 19 15 15 15 15 12 24 24 24 30 30
+ 18 36 36 38 38 35 35 24 24 18 18  1  1  1  1  1  9  9 18 11 11  4  1  1
+ 16 16 34 34  1 20 20 20 20  2  2  2  2  2  2  1  1  1  1  1  1  1  1  1]
+trans:
+ [ 1 18 24 15  3  1 32 13 17 26 22  1  9 19 15 12 24 30 18 36 38 35 24 18
+  1  9 18 11  4  1 16 34  1 20  2  1]
+save model /data/sxu/easton/projects/EODM/exps/timit/timit_EODM/checkpoint/ckpt-600
+EODM loss: 11.59	loss_fs: 193.409 * 2e-05	loss_supervise: 1.725 * 3.0	batch: (1000, 260, 195) time: 1.32 s 13225.108% step: 610
+EODM loss: 11.50	loss_fs: 203.552 * 2e-05	loss_supervise: 1.719 * 3.0	batch: (1000, 260, 195) time: 1.36 s 13441.558% step: 620
+EODM loss: 11.45	loss_fs: 196.592 * 2e-05	loss_supervise: 1.709 * 3.0	batch: (1000, 242, 195) time: 1.35 s 13658.009% step: 630
+EODM loss: 11.54	loss_fs: 199.015 * 2e-05	loss_supervise: 1.706 * 3.0	batch: (1000, 242, 195) time: 1.34 s 13874.459% step: 640
+EODM loss: 11.43	loss_fs: 199.485 * 2e-05	loss_supervise: 1.704 * 3.0	batch: (1000, 220, 195) time: 1.34 s 14090.909% step: 650

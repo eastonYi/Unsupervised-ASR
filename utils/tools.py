@@ -60,6 +60,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 class TFData:
     """
     test on TF2.0
+    save and read tfdata 
     """
     def __init__(self, dataset, dir_save, args, size_file=5000000, max_feat_len=3000):
         self.dataset = dataset
@@ -105,7 +106,7 @@ class TFData:
 
         with open(str(self.dir_save/'tfdata.info'), 'w') as fw:
             fw.write('data_file {}\n'.format(self.dataset.file))
-            fw.write('dim_feature {}\n'.format(self.dim_feature))
+            fw.write('dim_feature {}\n'.format(self.dataset[0]['feature'].shape[-1]))
             fw.write('num_tokens {}\n'.format(num_token))
             fw.write('size_dataset {}\n'.format(len(self.dataset)-num_damaged_sample))
             fw.write('damaged samples: {}\n'.format(num_damaged_sample))
@@ -287,16 +288,14 @@ def align_shrink(align):
     return list_tokens
 
 
-def ctc_shrink(distribution, blk, max_label_len):
-    batch_size, len_time, dim_output = distribution.shape
-    # batch_size = tf.shape(distribution)[0]
-    # len_time = tf.shape(distribution)[1]
-    # dim_output = tf.shape(distribution)[2]
-    tokens = tf.argmax(distribution, -1)
+def ctc_shrink(logits):
+    batch_size, len_time, dim_output = logits.shape
+    blk = dim_output - 1
+    tokens = tf.argmax(logits, -1)
     # intermediate vars along time
     list_fires = []
     token_prev = tf.ones((batch_size), tf.int64) * -1
-    blk_batch = tf.cast(tf.ones((batch_size), tf.int32) * (blk-1), tf.int64)
+    blk_batch = tf.cast(tf.ones((batch_size), tf.int32) * blk, tf.int64)
     pad_batch = tf.zeros((batch_size), tf.int64)
 
     for t in tf.range(len_time):
@@ -307,18 +306,18 @@ def ctc_shrink(distribution, blk, max_label_len):
         token_prev = token
 
     fires = tf.stack(list_fires, 1)
+    label_len = tf.reduce_sum(tf.cast(fires, tf.int32), -1)
+    max_label_len = tf.reduce_max(label_len)
     list_ls = []
     # len_labels = tf.reduce_sum(tf.cast(fires, tf.int32), -1)
     # max_label_len = tf.reduce_max(len_labels)
     for b in tf.range(batch_size):
-        l = tf.gather_nd(distribution[b, :, :], tf.where(fires[b]))[:max_label_len, :]
+        l = tf.gather_nd(logits[b, :, :], tf.where(fires[b]))
         pad_l = tf.zeros([max_label_len-tf.shape(l)[0], dim_output])
         list_ls.append(tf.concat([l, pad_l], 0))
 
-    distribution_shrunk = tf.stack(list_ls, 0)
-    # import pdb; pdb.set_trace()
-    # print('e')
-    return distribution_shrunk
+    logits_shrunk = tf.stack(list_ls, 0)
+    return logits_shrunk
 
 
 def pad_to(tensor, length):
@@ -554,6 +553,21 @@ def CE_loss(logits, labels, vocab_size, confidence=0.9):
     loss = tf.reduce_sum(loss) / tf.reduce_sum(mask)
 
     return loss
+
+def ctc_loss(logits, len_logits, labels, len_labels):
+    """
+    No valid path found: It is possible that no valid path is found if the
+    activations for the targets are zero.
+    """
+    ctc_loss = tf.nn.ctc_loss(
+        labels,
+        logits,
+        label_length=len_labels,
+        logit_length=len_logits,
+        logits_time_major=False,
+        blank_index=-1)
+
+    return ctc_loss
 
 
 def evaluate(feature, dataset, dev_size, model, beam_size=0, with_stamp=True, wfst=None):
@@ -953,3 +967,12 @@ def process_raw_feature(features, args):
     splices = tf.concat(axis=1, values=splices)
 
     return splices[::rate]
+
+
+def save_varibales(model):
+
+    return {i.name: i.numpy() for i in model.trainable_variables}
+
+def load_values(model, values):
+    for i in model.trainable_variables:
+        i.assign(values[i.name])

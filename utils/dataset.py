@@ -170,7 +170,6 @@ class ASR_align_DataSet(ASRDataSet):
                 uttid, len_feature = line.strip().split()
                 dict_feat_len[uttid] = int(len_feature)
         align_rate = self.get_alignRate(align_file)
-
         with open(align_file) as f:
             for line in f:
                 uttid, align = line.strip().split(maxsplit=1)

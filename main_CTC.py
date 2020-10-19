@@ -12,7 +12,7 @@ from tqdm import tqdm
 from utils.tools import TFData
 from utils.arguments import args
 from utils.dataset import ASR_align_ArkDataSet, ASR_align_DataSet
-from utils.tools import batch_cer
+from utils.tools import batch_cer, get_tensor_len, ctc_shrink
 
 from models.GAN import PhoneClassifier as Model
 # from models.encoders.encoders import conv_lstm as Model
@@ -60,10 +60,10 @@ def Train():
         # wav data
         feature_train = TFData(dataset=dataset_train,
                         dir_save=args.dirs.train.tfdata,
-                        args=args).read()
+                        args=args).read(transform=True)
         feature_dev = TFData(dataset=dataset_dev,
                         dir_save=args.dirs.dev.tfdata,
-                        args=args).read()
+                        args=args).read(transform=True)
         bucket = tf.data.experimental.bucket_by_sequence_length(
             element_length_func=lambda uttid, x: tf.shape(x)[0],
             bucket_boundaries=args.list_bucket_boundaries,
@@ -203,9 +203,11 @@ def get_logits_len(logits):
 def monitor(sample, model):
     x = np.array([sample['feature']], dtype=np.float32)
     logits = model(x)
+
     len_logits = get_logits_len(logits)
     preds = ctc_decode(logits, len_logits)
-
+    # logits_shrunk = ctc_shrink(logits)
+    # preds = tf.argmax(logits_shrunk, -1)
     print('predicts: \n', preds.numpy()[0])
     # print('align: \n', sample['align'])
     print('trans: \n', sample['trans'])
@@ -218,16 +220,18 @@ def evaluate(feature, dataset, dev_size, model):
     total_res_len = 0
     for batch in feature:
         uttids, x = batch
+        # import pdb; pdb.set_trace()
         # preds = forward(x, model)
         logits = model(x)
         len_logits = get_logits_len(logits)
         preds = ctc_decode(logits, len_logits)
+        # logits_shrunk = ctc_shrink(logits)
+        # preds = tf.argmax(logits_shrunk, -1)
         trans = dataset.get_attrs('trans', uttids.numpy())
         batch_cer_dist, batch_cer_len, batch_res_len = batch_cer(preds.numpy(), trans)
         total_cer_dist += batch_cer_dist
         total_cer_len += batch_cer_len
         total_res_len += batch_res_len
-
         num_processed += len(x)
         sys.stdout.write('\rinfering {} / {} ...'.format(num_processed, dev_size))
         sys.stdout.flush()
@@ -238,7 +242,7 @@ def evaluate(feature, dataset, dev_size, model):
     return cer
 
 
-@tf.function(experimental_relax_shapes=True)
+# @tf.function(experimental_relax_shapes=True)
 def train_CTC_supervised(x, labels, model, optimizer):
     with tf.GradientTape() as tape:
         logits = model(x, training=True)

@@ -1,6 +1,10 @@
 dirs:
     exp: timit
     train:
+    #     trans: /home/user/easton/data/TIMIT/kaldi_gen/train_200.trans
+    #     align: /home/user/easton/data/TIMIT/kaldi_gen/train_200.phone.frame
+    #     wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train200_wav.scp
+    #     tfdata: /home/user/easton/data/TIMIT/tfdata/train200_feats
         trans: /home/user/easton/data/TIMIT/kaldi_gen/train.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/train.phone.frame
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/train_wav.scp
@@ -18,7 +22,6 @@ dirs:
     dev:
         trans: /home/user/easton/data/TIMIT/kaldi_gen/test.trans
         align: /home/user/easton/data/TIMIT/kaldi_gen/test.phone.frame
-        # align: /data/sxu/easton/data/TIMIT/test.ali2
         wav_scp: /home/user/easton/data/TIMIT/kaldi_gen/test_wav.scp
         tfdata: /home/user/easton/data/TIMIT/tfdata/test_feats
     test:
@@ -27,46 +30,52 @@ dirs:
         data: /home/user/easton/data/TIMIT/train_phone.txt
     type: csv
     vocab: /home/user/easton/data/TIMIT/phone39.vocab
-    # checkpoint: /data/sxu/easton/projects/EODM/exps/timit_supervised/200/checkpoint
+    checkpoint: /home/user/easton/projects/EODM/exps/timit/timit_GAN/conv_200_gan/checkpoint/ckpt-22600
 
 data:
     featType: mfcc
     dim_raw_input: 13
-    num_context: 5
+    left_context: 0
+    right_context: 0
     downsample: 1
-    add_delta: True
+    add_delta: False
     unit: phone
 
 model:
     G:
-        structure: fc+GRU
-        num_fc_hidden: 256
-        num_hidden: 64
-        num_cell_hidden: 160
-        num_layers: 1
         # structure: fc
-        # num_hidden: 512
+        # structure: fc+GRU
+        # num_fc_hidden: 256
+        # num_hidden: 64
+        # num_cell_hidden: 160
         # num_layers: 1
-        # len_seq: 20
+        structure: conv
+        num_hidden: 256
+        num_layers: 2
+        len_seq: 60
     D:
-        num_hidden: 512
+        num_hidden: 256
         num_blocks: 5
         max_label_len: 60
 opti:
-    D_G_rate: 1
+    lr: 0.0004
+    D_G_rate: 3
     G:
         lr: 0.0001
     D:
         lr: 0.0001
 
-dev_step: 200
-decode_step: 200
-save_step: 200
+dev_step: 50
+decode_step: 50
+save_step: 50
 
 gpus: '0'
-batch_size: 200
-num_supervised: 200
+batch_size: 100
+num_supervised: 100
 
 lambda_fs: 0.00002
-lambda_gp: 10.0
-lambda_supervision: 5.0
+lambda_gp: 5.0
+lambda_supervise: 0.1
+
+num_batch_tokens: 10000
+bucket_boundaries: 324,372,420,472,552,712,1040
