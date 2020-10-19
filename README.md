@@ -1,4 +1,6 @@
 # Unsupervised phone classification
+Implements of
+![EODM](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwieh8LU68DsAhVMfSsKHaJdAEAQFjABegQIAhAC&url=https%3A%2F%2Fopenreview.net%2Fforum%3Fid%3DBylmkh05KX&usg=AOvVaw2yHfCik8RA7OlONom5IwiW).
 
 ## Environments
 - Tensorflow == 2.2
@@ -18,7 +20,7 @@ data
 
 
 ### data prepare
-All the files needed for timit demo is already in `data/timit`. You need to generate `tfrecord` first:
+All the files needed for timit demo are already in `data/timit`. You need to generate `tfrecord` first:
 ```
 python data_prepare.py configs/timit/timit_EODM.yaml
 ```
@@ -28,7 +30,7 @@ python data_prepare.py configs/timit/timit_EODM.yaml
 ```bash
 python main_EODM.py --gpu 1 -c configs/timit/timit_EODM.yaml
 ```
-
+, where `--gpu` is the free gpu index in your machine.
 I realize Eq.1 by applying Conv_1d on the model's output, i.e. the distribution sequence.
 `ngram2kernel` is to convert ngram to a kernel and `P_Ngram` is the model to use the fixed ngram kernel to compute EODM loss.
 
