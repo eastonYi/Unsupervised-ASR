@@ -36,6 +36,8 @@ I realize Eq.1 by applying Conv_1d on the model's output, i.e. the distribution 
 
 You can check my inconplete log file in `logs/train_timit_EODM.log`.
 
+**NOTE**
+I found that pure unsupervised training is unstable and only converges at specific seeds. So I add few labelled samples (250) to make sure the convergence.
 ==========
 
 Performance of one layer fully-connected classifier:
