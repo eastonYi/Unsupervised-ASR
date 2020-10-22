@@ -38,7 +38,7 @@ def main():
         feat_len_file=args.dirs.train.feat_len,
         args=args,
         _shuffle=False,
-        transform=False)
+        transform=True)
     dataset_dev = ASR_align_DataSet(
         trans_file=args.dirs.dev.trans,
         uttid2wav=args.dirs.dev.wav_scp,
@@ -46,7 +46,7 @@ def main():
         feat_len_file=args.dirs.dev.feat_len,
         args=args,
         _shuffle=False,
-        transform=False)
+        transform=True)
     feature_train = TFData(dataset=dataset_train,
                     dir_save=args.dirs.train.tfdata,
                     args=args)
@@ -60,7 +60,7 @@ def main():
                     dir_save=args.dirs.dev.tfdata,
                     args=args)
     feature_train.split_save(capacity=100000)
-    # feature_dev.split_save(capacity=100000)
+    feature_dev.split_save(capacity=100000)
     # feature_untrain.split_save(capacity=100000)
     # feature_train_supervise.save('0')
 

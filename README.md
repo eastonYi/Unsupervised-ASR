@@ -8,7 +8,7 @@ Implementation of
 
 ## EODM exps (timit)
 
-======= update in 2020/10/19 ========
+======= update in 2020/10/22 ========
 
 related files:
 - models/EODM.py
@@ -25,6 +25,9 @@ All the files needed for timit demo are already in `data/timit`. You need to gen
 python data_prepare.py configs/timit/timit_EODM.yaml
 ```
 `0.recode` and `tfdata.info` will appear in  `data/timit/train_feats/` and `data/timit/test_feats/` dirs.
+**NOTE**
+
+The `tfdata.info` is the sample info stored in `0.record`, where `dim_feature` should be the dim of processed feature (by `dataProcess/process_raw_feature`). `ASR_align_DataSet` should be created with `transform=True` in `data_prepare.py`.
 
 ### training
 ```bash
@@ -37,6 +40,7 @@ I realize Eq.1 by applying Conv_1d on the model's output, i.e. the distribution 
 You can check my inconplete log file in `logs/train_timit_EODM.log`.
 
 **NOTE**
+
 I found that pure unsupervised training is unstable and only converges at specific seeds. So I add few labelled samples (250) to make sure the convergence.
 ==========
 

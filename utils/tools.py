@@ -60,7 +60,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 class TFData:
     """
     test on TF2.0
-    save and read tfdata 
+    save and read tfdata
     """
     def __init__(self, dataset, dir_save, args, size_file=5000000, max_feat_len=3000):
         self.dataset = dataset
@@ -68,8 +68,10 @@ class TFData:
         self.dir_save = dir_save
         self.args = args
         self.size_file = size_file
-        self.dim_feature = self.read_tfdata_info(dir_save)['dim_feature']\
-            if self.read_tfdata_info(dir_save)['dim_feature'] else dataset[0]['feature'].shape[-1]
+        try:
+            self.dim_feature = self.read_tfdata_info(dir_save)['dim_feature']
+        except:
+            self.dim_feature = dataset[0]['feature'].shape[-1]
 
     def split_save(self, length_file='feature_length.txt', capacity=50000):
         num_token = 0

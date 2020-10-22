@@ -25,16 +25,19 @@ dirs:
         align: data/timit/train.phone.frame
         wav_scp: data/timit/train_wav.scp
         tfdata: data/timit/train_feats
+        # tfdata: data/timit/train_feats_13_2_3_3
     train_supervise:
         trans: data/timit/train_trans.txt
         align: data/timit/train.phone.frame
         wav_scp: data/timit/train_wav.scp
         tfdata: data/timit/train_feats
+        # tfdata: data/timit/train_feats_13_2_3_3
     dev:
         trans: data/timit/test_trans.txt
         align: data/timit/test.phone.frame
         wav_scp: data/timit/test_wav.scp
         tfdata: data/timit/test_feats
+        # tfdata: data/timit/test_feats_13_2_3_3
     test:
         trans: data/timit/test_trans.txt
     type: csv

@@ -176,7 +176,6 @@ def train_G_supervised(x, aligns, G, optimizer, dim_output, lambda_supervision):
     with tf.GradientTape() as tape_G:
         logits = G(x, training=True)
         ce_loss = CE_loss(logits, aligns, dim_output, confidence=0.9)
-
     gradients_G = tape_G.gradient(ce_loss, G.trainable_variables)
     optimizer.apply_gradients(zip(gradients_G, G.trainable_variables))
 
